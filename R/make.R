@@ -418,17 +418,47 @@ createExecutionSettingsFromConfig <- function(
 }
 
 #' @title Set Output Folder for Task
-#' @description Create an output folder for a specific task within the results directory, organized by database name and pipelineVersion.
+#' @description Create an output folder for a specific task within the results
+#'   directory, organized by database name and pipeline version.
+#'
+#'   The pipeline-version path segment is derived through [ExecutionContext] so it
+#'   always matches the cohort-table suffix produced by
+#'   [createExecutionSettingsFromConfig()]: a non-semver (test) `pipelineVersion`
+#'   such as `"develop_ml"` is normalized to lowercase snake_case, and a semantic
+#'   version such as `"1.0.2"` is used unchanged.
 #' @param executionSettings An ExecutionSettings object containing the databaseName attribute
-#' @param pipelineVersion A character string specifying the pipelineVersion of the analysis (e.g., "0.0.1", "1.0.2")
+#' @param pipelineVersion A character string specifying the pipeline version of the
+#'   analysis: a test namespace (e.g. `"develop_ml"`) or a semantic version (e.g. `"1.0.2"`).
 #' @param taskName The name of the task for which to create the output folder
 #' @param execPath The base path for results (default is "exec/results" within the project)
 #' @return The path to the created output folder
 #' @export
 setOutputFolder <- function(executionSettings, pipelineVersion, taskName, execPath = here::here("exec/results")) {
-  dbNameSnake <- snakecase::to_snake_case(executionSettings$databaseName)
-  outputFolder <- fs::path(execPath, dbNameSnake, pipelineVersion, taskName) |>
+  checkmate::assert_class(executionSettings, "ExecutionSettings")
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
+  checkmate::assert_string(taskName, min.chars = 1)
+
+  isSemver <- grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
+
+  if (isSemver) {
+    executionMode <- "production"
+    studyVersion <- pipelineVersion
+  } else {
+    executionMode <- "test"
+    studyVersion <- NULL
+  }
+
+  executionContext <- ExecutionContext$new(
+    mode = executionMode,
+    pipelineVersion = pipelineVersion,
+    studyVersion = studyVersion,
+    databaseName = executionSettings$databaseName,
+    execPath = execPath
+  )
+
+  outputFolder <- executionContext$getResultsPath(taskName = taskName) |>
     fs::dir_create()
+
   return(outputFolder)
 }
 

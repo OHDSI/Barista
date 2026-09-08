@@ -275,7 +275,6 @@ ExecutionSettings <- R6::R6Class(
 #' isolate its database and filesystem outputs. This R6 class owns execution
 #' mode and pipeline version (the namespace).
 #'
-#' @export
 ExecutionContext <- R6::R6Class(
   classname = "ExecutionContext",
   public = list(

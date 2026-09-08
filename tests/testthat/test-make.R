@@ -257,6 +257,48 @@ testthat::test_that("makeTaskFile creates a numbered task script in analysis/tas
   testthat::expect_true(grepl("Create incidence summary output", task_text, fixed = TRUE))
 })
 
+testthat::test_that("setOutputFolder derives a version segment that matches the cohort-table suffix", {
+  es <- ExecutionSettings$new(
+    connectionDetails = DatabaseConnector::createConnectionDetails(
+      dbms = "sqlite",
+      server = ":memory:"
+    ),
+    cdmDatabaseSchema = "main",
+    workDatabaseSchema = "main",
+    cohortTable = "cohort_table",
+    databaseName = "My Database"
+  )
+
+  execPath <- fs::path(withr::local_tempdir(), "exec", "results")
+
+  # Non-semver namespace is normalized to lowercase snake_case, so the results
+  # folder segment matches the cohort-table suffix from
+  # createExecutionSettingsFromConfig() ("cohort_table_develop_ml").
+  test_folder <- setOutputFolder(
+    executionSettings = es,
+    pipelineVersion = "Develop ML",
+    taskName = "01_task",
+    execPath = execPath
+  )
+  testthat::expect_equal(
+    as.character(test_folder),
+    as.character(fs::path(execPath, "my_database", "develop_ml", "01_task"))
+  )
+  testthat::expect_true(fs::dir_exists(test_folder))
+
+  # Semantic versions pass through unchanged.
+  prod_folder <- setOutputFolder(
+    executionSettings = es,
+    pipelineVersion = "1.2.3",
+    taskName = "01_task",
+    execPath = execPath
+  )
+  testthat::expect_equal(
+    as.character(prod_folder),
+    as.character(fs::path(execPath, "my_database", "1.2.3", "01_task"))
+  )
+})
+
 testthat::test_that("makeSrcFile creates a snake_case utility R file in analysis/src", {
   repo_ctx <- make_test_repo_for_file_creation("src_repo")
   on.exit(fs::dir_delete(repo_ctx$root_dir), add = TRUE)
