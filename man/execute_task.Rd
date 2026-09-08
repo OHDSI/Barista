@@ -10,10 +10,10 @@ execute_task(
   pipelineVersion = "dev",
   checkStatus = FALSE,
   env = rlang::caller_env(),
-  cohortTableSuffix = NULL,
   codeState = NULL,
   logFilePath = NULL,
-  cohortManifestHash = NULL
+  cohortManifestHash = NULL,
+  executionContext = NULL
 )
 }
 \arguments{
@@ -46,6 +46,10 @@ hash (see \code{.getCohortManifestHash()}). NULL (default) computes it once
 here; \code{execute_pipeline()} computes it once and passes it in so the
 manifest is not re-loaded for every task. Recorded with the run and used
 for the rerun check.}
+
+\item{executionContext}{An optional \code{ExecutionContext} for the current run.
+When supplied it owns namespace derivation (cohort-table suffix, results
+folder) and \code{pipelineVersion} is taken from it.}
 }
 \description{
 Function to execute a study task in Ulysses

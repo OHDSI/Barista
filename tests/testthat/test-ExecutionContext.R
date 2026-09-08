@@ -129,3 +129,41 @@ testthat::test_that("normalizePipelineVersion lowercases and snake-cases without
 
   testthat::expect_error(normalizePipelineVersion("---"), "at least one letter or number")
 })
+
+testthat::test_that("resolveResultsPath derives one path from ExecutionSettings or a context", {
+  es <- ExecutionSettings$new(
+    connectionDetails = DatabaseConnector::createConnectionDetails(
+      dbms = "sqlite",
+      server = ":memory:"
+    ),
+    cdmDatabaseSchema = "main",
+    workDatabaseSchema = "main",
+    cohortTable = "cohort_table",
+    databaseName = "My Database"
+  )
+  execPath <- fs::path(withr::local_tempdir(), "exec", "results")
+
+  # No context: derived from executionSettings + pipelineVersion, normalized.
+  testthat::expect_equal(
+    as.character(resolveResultsPath(es, "Develop ML", "00_buildCohorts", execPath = execPath)),
+    as.character(fs::path(execPath, "my_database", "develop_ml", "00_buildCohorts"))
+  )
+
+  # Semantic version passes through unchanged.
+  testthat::expect_equal(
+    as.character(resolveResultsPath(es, "1.2.3", execPath = execPath)),
+    as.character(fs::path(execPath, "my_database", "1.2.3"))
+  )
+
+  # A run-scoped context (no databaseName of its own) still resolves via the
+  # database name from executionSettings.
+  ctx <- ExecutionContext$new(
+    mode = "test",
+    pipelineVersion = "develop_ml",
+    execPath = execPath
+  )
+  testthat::expect_equal(
+    as.character(resolveResultsPath(es, "ignored", "00_buildCohorts", executionContext = ctx)),
+    as.character(fs::path(execPath, "my_database", "develop_ml", "00_buildCohorts"))
+  )
+})

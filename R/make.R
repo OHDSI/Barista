@@ -415,29 +415,14 @@ createExecutionSettingsFromConfig <- function(
 #' @return The path to the created output folder
 #' @export
 setOutputFolder <- function(executionSettings, pipelineVersion, taskName, execPath = here::here("exec/results")) {
-  checkmate::assert_class(executionSettings, "ExecutionSettings")
-  checkmate::assert_string(pipelineVersion, min.chars = 1)
   checkmate::assert_string(taskName, min.chars = 1)
 
-  isSemver <- grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
-
-  if (isSemver) {
-    executionMode <- "production"
-    studyVersion <- pipelineVersion
-  } else {
-    executionMode <- "test"
-    studyVersion <- NULL
-  }
-
-  executionContext <- ExecutionContext$new(
-    mode = executionMode,
+  outputFolder <- resolveResultsPath(
+    executionSettings = executionSettings,
     pipelineVersion = pipelineVersion,
-    studyVersion = studyVersion,
-    databaseName = executionSettings$databaseName,
+    taskName = taskName,
     execPath = execPath
-  )
-
-  outputFolder <- executionContext$getResultsPath(taskName = taskName) |>
+  ) |>
     fs::dir_create()
 
   return(outputFolder)

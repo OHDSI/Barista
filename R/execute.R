@@ -316,23 +316,13 @@ generateCohorts <- function(executionSettings, pipelineVersion,
     cli::cli_alert_success("Cohort generation completed successfully!")
     
     # Save cohort counts to output folder
-    databaseName <- executionSettings$databaseName
-    dbNameSnake <- snakecase::to_snake_case(databaseName)
-    
-    if (is.null(executionContext)) {
-      outputFolder <- fs::path(
-        here::here("exec/results"),
-        dbNameSnake,
-        pipelineVersion,
-        "00_buildCohorts"
-      )
-    } else {
-      outputFolder <- executionContext$getResultsPath(
-        taskName = "00_buildCohorts",
-        databaseName = databaseName
-      )
-    }
-    
+    outputFolder <- resolveResultsPath(
+      executionSettings = executionSettings,
+      pipelineVersion = pipelineVersion,
+      taskName = "00_buildCohorts",
+      executionContext = executionContext
+    )
+
     # Create output folder if it doesn't exist
     if (!dir.exists(outputFolder)) {
       dir.create(outputFolder, recursive = TRUE, showWarnings = FALSE)

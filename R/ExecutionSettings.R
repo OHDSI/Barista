@@ -436,3 +436,54 @@ ExecutionContext <- R6::R6Class(
     .maxTableNameLength = NULL
   )
 )
+
+#' @title Resolve a task results path
+#' @description Returns the absolute `exec/results/<database>/<pipelineVersion>/<taskName>`
+#'   path for a run. When an `ExecutionContext` is supplied it is used directly;
+#'   otherwise an equivalent one is derived from the `ExecutionSettings` object
+#'   and the pipeline version. This keeps every results-folder path in the
+#'   package flowing through [ExecutionContext]'s `getResultsPath()` rather than
+#'   being hand-assembled at each call site.
+#' @param executionSettings An `ExecutionSettings` object; supplies the database name.
+#' @param pipelineVersion Character. Test namespace (e.g. `"develop_ml"`) or
+#'   semantic version (e.g. `"1.0.2"`). Ignored when `executionContext` is supplied.
+#' @param taskName Character or `NULL`. Task folder name appended to the path.
+#' @param executionContext Optional `ExecutionContext` for the current run.
+#' @param execPath Character. Base results path. Defaults to `exec/results` in
+#'   the current study project. Ignored when `executionContext` is supplied.
+#' @return Character. The absolute results path (not created).
+#' @keywords internal
+resolveResultsPath <- function(executionSettings,
+                               pipelineVersion,
+                               taskName = NULL,
+                               executionContext = NULL,
+                               execPath = here::here("exec/results")) {
+  checkmate::assert_class(executionSettings, "ExecutionSettings")
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+
+  if (is.null(executionContext)) {
+    checkmate::assert_string(pipelineVersion, min.chars = 1)
+
+    isSemver <- grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
+    if (isSemver) {
+      executionMode <- "production"
+      studyVersion <- pipelineVersion
+    } else {
+      executionMode <- "test"
+      studyVersion <- NULL
+    }
+
+    executionContext <- ExecutionContext$new(
+      mode = executionMode,
+      pipelineVersion = pipelineVersion,
+      studyVersion = studyVersion,
+      databaseName = executionSettings$databaseName,
+      execPath = execPath
+    )
+  }
+
+  executionContext$getResultsPath(
+    taskName = taskName,
+    databaseName = executionSettings$databaseName
+  )
+}

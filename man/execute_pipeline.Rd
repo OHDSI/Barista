@@ -13,8 +13,7 @@ execute_pipeline(
   ignoreUncommittedPaths = NULL,
   skipCodeStateCheck = FALSE,
   env = rlang::caller_env(),
-  pipelineVersionOverride = NULL,
-  cohortTableSuffix = NULL
+  pipelineVersionOverride = NULL
 )
 }
 \arguments{
@@ -23,8 +22,10 @@ execute_pipeline(
 \item{updateType}{the type of version increment: 'major', 'minor', or 'patch'.
 Only used when testMode = FALSE.}
 
-\item{testMode}{Logical. If TRUE, skips all validations and uses "dev" version.
-If FALSE, enforces code validation and version management. Default: FALSE}
+\item{testMode}{Logical. If TRUE, uses test namespace/version handling and
+skips production version management. Public test entry points still apply
+the main-branch guard. If FALSE, enforces production version management.
+Default: FALSE}
 
 \item{skipRenv}{Logical. If TRUE, skips renv validation. Default: FALSE}
 
@@ -41,11 +42,10 @@ entirely. Default: FALSE}
 
 \item{env}{the execution environment}
 
-\item{pipelineVersionOverride}{Character. Optional test-mode override for
-the pipeline version folder label.}
-
-\item{cohortTableSuffix}{Character. Optional test-mode suffix used for
-cohort table names.}
+\item{pipelineVersionOverride}{Character. Optional test-mode override for the
+pipeline version (the test namespace). Drives the cohort-table suffix, the
+results folder, and the task-history namespace via the run's
+\code{ExecutionContext}.}
 }
 \value{
 Invisibly returns task results list
