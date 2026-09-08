@@ -35,7 +35,11 @@ createExecutionSettingsFromConfig(
 
 \item{databaseName}{Character. Override for human-readable database name.}
 
-\item{pipelineVersion}{Character. Pipeline version ("prod" for production table, "dev" or "0.0.1" etc.).}
+\item{pipelineVersion}{Character. \code{"prod"} (the default) or a
+\code{MAJOR.MINOR.PATCH} version means "use the configured production cohort
+table unchanged". Any other value (e.g. \code{"dev"}, \code{"develop_ml"}) is
+treated as a test namespace and routes to a suffixed cohort table. Ignored
+when \code{executionContext} is supplied.}
 
 \item{cohortTableSuffix}{Character. Optional suffix for cohort table names in
 non-semver (test) runs. Normalized to lowercase snake_case via

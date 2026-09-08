@@ -230,6 +230,20 @@ createExecutionSettings <- function(connectionDetails,
   )
 }
 
+#' @title Does a legacy pipelineVersion string mean "production"?
+#' @description The `pipelineVersion` argument of
+#'   [createExecutionSettingsFromConfig()] carries two meanings: the sentinel
+#'   `"prod"` and any `MAJOR.MINOR.PATCH` version select the configured
+#'   production cohort table unchanged; every other value is a test namespace
+#'   that routes to a suffixed table.
+#' @param pipelineVersion Character.
+#' @return Logical.
+#' @keywords internal
+isProductionPipelineVersion <- function(pipelineVersion) {
+  identical(pipelineVersion, "prod") ||
+    grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
+}
+
 #' @title Create ExecutionSettings from Config Block
 #' @description Load database connection details and execution parameters from config.yml
 #'   and secrets.yml. Schema info (CDM schema, work schema, cohort table, etc.) comes from
@@ -243,7 +257,11 @@ createExecutionSettings <- function(connectionDetails,
 #' @param tempEmulationSchema Character. Override for temp emulation schema.
 #' @param cohortTable Character. Override for cohort table name.
 #' @param databaseName Character. Override for human-readable database name.
-#' @param pipelineVersion Character. Pipeline version ("prod" for production table, "dev" or "0.0.1" etc.).
+#' @param pipelineVersion Character. \code{"prod"} (the default) or a
+#'   \code{MAJOR.MINOR.PATCH} version means "use the configured production cohort
+#'   table unchanged". Any other value (e.g. \code{"dev"}, \code{"develop_ml"}) is
+#'   treated as a test namespace and routes to a suffixed cohort table. Ignored
+#'   when \code{executionContext} is supplied.
 #' @param cohortTableSuffix Character. Optional suffix for cohort table names in
 #'   non-semver (test) runs. Normalized to lowercase snake_case via
 #'   \code{normalizePipelineVersion()}. If NULL, the non-semver
@@ -285,12 +303,10 @@ createExecutionSettingsFromConfig <- function(
   if (!is.null(executionContext)) {
     pipelineVersion <- executionContext$getPipelineVersion()
     executionMode <- executionContext$getMode()
+  } else if (isProductionPipelineVersion(pipelineVersion)) {
+    executionMode <- "production"
   } else {
-    if (grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)) {
-      executionMode <- "production"
-    } else {
-      executionMode <- "test"
-    }
+    executionMode <- "test"
   }
 
   if (!file.exists(configFilePath)) {

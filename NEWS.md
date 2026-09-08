@@ -64,6 +64,7 @@
 
 ## Bug Fixes
 
+- `createExecutionSettingsFromConfig()` now honors its documented default: `pipelineVersion = "prod"` (or a `MAJOR.MINOR.PATCH` version) uses the configured cohort table unchanged. Previously `"prod"` was treated as a non-semver test namespace and produced a `_prod`-suffixed table.
 - Fixed cohort-manifest change detection for task reruns (`shouldRerunTask()`), which was broken three ways at once, so editing a cohort definition never re-ran the tasks that used it:
   - The hash helper called `CohortDef$getHash()`, a method renamed to `getSqlHash()` months earlier, so it always errored and returned `NA`.
   - An `NA` hash *disabled* the manifest check instead of forcing a rerun (masking the first bug once a study had any cohorts).
