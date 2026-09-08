@@ -268,72 +268,73 @@ ExecutionSettings <- R6::R6Class(
   )
 )
 
-#' ExecutionContext R6 Class
+#' @title ExecutionContext
+#' @description
 #'
 #' Describes one Picard pipeline execution and derives the names used to
-#' isolate its database and filesystem outputs. Database connection details
-#' remain in [ExecutionSettings]; this class owns execution mode and
-#' namespacing.
+#' isolate its database and filesystem outputs. This R6 class owns execution
+#' mode and pipeline version (the namespace).
 #'
-#' @param mode Character. Either `"test"` or `"production"`.
-#' @param namespace Character. The complete execution namespace. Test
-#'   namespaces are normalized to lowercase snake case; production namespaces
-#'   must be semantic versions.
-#' @param studyVersion Character or `NULL`. The study version associated with
-#'   the execution. Required for production and optional for test runs.
-#' @param baseCohortTable Character. The configured, unsuffixed cohort table.
-#' @param databaseName Character. Human-readable database name used in result
-#'   paths.
-#' @param execPath Character. Base path for execution results. Defaults to
-#'   `exec/results` in the current study project.
-#' @param maxTableNameLength Integer. Maximum permitted length of the derived
-#'   cohort table name. Defaults to 30, the strict portable limit.
-#'
-#' @return An `ExecutionContext` R6 object.
 #' @export
 ExecutionContext <- R6::R6Class(
   classname = "ExecutionContext",
   public = list(
+    #' @param mode Character. Either `"test"` or `"production"`.
+    #' @param pipelineVersion Character. The complete execution pipeline version. Test
+    #'   pipeline versions are normalized to lowercase snake case; production pipeline versions
+    #'   must be semantic versions.
+    #' @param studyVersion Character or `NULL`. The study version associated with
+    #'   the execution. Required for production and optional for test runs.
+    #' @param baseCohortTable Character. The configured, unsuffixed cohort table.
+    #' @param databaseName Character. Human-readable database name used in result
+    #'   paths.
+    #' @param execPath Character. Base path for execution results. Defaults to
+    #'   `exec/results` in the current study project.
+    #' @param maxTableNameLength Integer. Maximum permitted length of the derived
+    #'   cohort table name. Defaults to 60, a practical cross-database limit for
+    #'   test-derived names. Set to `NULL` to disable this package-level check.
     initialize = function(mode = c("test", "production"),
-                          namespace,
+                          pipelineVersion,
                           studyVersion = NULL,
                           baseCohortTable,
                           databaseName,
                           execPath = here::here("exec/results"),
-                          maxTableNameLength = 30L) {
+                          maxTableNameLength = 60L) {
       mode <- match.arg(mode)
-      checkmate::assert_string(namespace, min.chars = 1)
+      checkmate::assert_string(pipelineVersion, min.chars = 1)
       checkmate::assert_string(baseCohortTable, min.chars = 1)
       checkmate::assert_string(databaseName, min.chars = 1)
       checkmate::assert_string(execPath, min.chars = 1)
-      checkmate::assert_int(maxTableNameLength, lower = 1)
+      checkmate::assert_int(maxTableNameLength, lower = 1, null.ok = TRUE)
 
       if (mode == "production") {
         checkmate::assert_string(studyVersion, min.chars = 1)
         if (!grepl("^\\d+\\.\\d+\\.\\d+$", studyVersion)) {
           cli::cli_abort("Production studyVersion must use MAJOR.MINOR.PATCH format.")
         }
-        if (!identical(namespace, studyVersion)) {
-          cli::cli_abort("Production namespace must match studyVersion.")
+        if (!identical(pipelineVersion, studyVersion)) {
+          cli::cli_abort("Production pipelineVersion must match studyVersion.")
         }
-        normalized_namespace <- namespace
+        normalized_pipeline_version <- pipelineVersion
         cohort_table <- baseCohortTable
       } else {
-        normalized_namespace <- private$normalize_namespace(namespace)
-        cohort_table <- paste0(baseCohortTable, "_", normalized_namespace)
+        normalized_pipeline_version <- private$normalize_pipeline_version(pipelineVersion)
+        cohort_table <- paste0(baseCohortTable, "_", normalized_pipeline_version)
       }
 
-      if (nchar(cohort_table) > maxTableNameLength) {
+        if (!is.null(maxTableNameLength) &&
+          mode == "test" &&
+          nchar(cohort_table) > maxTableNameLength) {
         cli::cli_abort(c(
           "Derived cohort table name is too long.",
           i = "Base table {.val {baseCohortTable}} has {nchar(baseCohortTable)} characters.",
-          i = "Namespace {.val {normalized_namespace}} produces {.val {cohort_table}} ({nchar(cohort_table)} characters).",
+          i = "Pipeline Version {.val {normalized_pipeline_version}} produces {.val {cohort_table}} ({nchar(cohort_table)} characters).",
           i = "The maximum permitted length is {maxTableNameLength} characters."
         ))
       }
 
       private$.mode <- mode
-      private$.namespace <- normalized_namespace
+      private$.pipelineVersion <- normalized_pipeline_version
       private$.studyVersion <- studyVersion
       private$.baseCohortTable <- baseCohortTable
       private$.cohortTable <- cohort_table
@@ -347,9 +348,9 @@ ExecutionContext <- R6::R6Class(
       private$.mode
     },
 
-    #' @return Character. Normalized execution namespace.
-    getNamespace = function() {
-      private$.namespace
+    #' @return Character. Normalized execution pipelineVersion.
+    getPipelineVersion = function() {
+      private$.pipelineVersion
     },
 
     #' @return Character or `NULL`. Associated production study version.
@@ -369,18 +370,18 @@ ExecutionContext <- R6::R6Class(
       path <- fs::path(
         private$.execPath,
         snakecase::to_snake_case(private$.databaseName),
-        private$.namespace
+        private$.pipelineVersion
       )
       if (!is.null(taskName)) {
         path <- fs::path(path, taskName)
       }
-      path
+      return(path)
     }
   ),
 
   private = list(
     .mode = NULL,
-    .namespace = NULL,
+    .pipelineVersion = NULL,
     .studyVersion = NULL,
     .baseCohortTable = NULL,
     .cohortTable = NULL,
@@ -388,17 +389,17 @@ ExecutionContext <- R6::R6Class(
     .execPath = NULL,
     .maxTableNameLength = NULL,
 
-    normalize_namespace = function(namespace) {
-      normalized <- tolower(trimws(namespace))
+    normalize_pipeline_version = function(pipelineVersion) {
+      normalized <- tolower(trimws(pipelineVersion))
       normalized <- gsub("[^a-z0-9]+", "_", normalized)
       normalized <- gsub("^_+|_+$", "", normalized)
       normalized <- gsub("_+", "_", normalized)
 
       if (!nzchar(normalized)) {
-        cli::cli_abort("Test namespace must contain at least one letter or number.")
+        cli::cli_abort("Test pipeline version must contain at least one letter or number.")
       }
 
-      normalized
+      return(normalized)
     }
   )
 )
