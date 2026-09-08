@@ -459,12 +459,19 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 
   # Check task status if requested
   if (checkStatus) {
-    # Build execution settings from configBlock
+    # Build execution settings from configBlock. When an ExecutionContext is
+    # supplied it owns namespace derivation, so the legacy suffix is not passed.
+    if (is.null(executionContext)) {
+      legacyCohortTableSuffix <- cohortTableSuffix
+    } else {
+      legacyCohortTableSuffix <- NULL
+    }
+
     tryCatch({
       executionSettings <- createExecutionSettingsFromConfig(
         configBlock = configBlock,
         pipelineVersion = pipelineVersion,
-        cohortTableSuffix = ifelse(is.null(executionContext), cohortTableSuffix, NULL),
+        cohortTableSuffix = legacyCohortTableSuffix,
         executionContext = executionContext
       )
     }, error = function(e) {
@@ -742,10 +749,20 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     pipelineVersion <- paste0(versionParts, collapse = ".")
   }
 
+  # Interpret pipelineVersion by mode: a test namespace has no study version,
+  # a production run's study version is the semantic pipelineVersion itself.
+  if (testMode) {
+    executionMode <- "test"
+    studyVersion <- NULL
+  } else {
+    executionMode <- "production"
+    studyVersion <- pipelineVersion
+  }
+
   executionContext <- ExecutionContext$new(
-    mode = ifelse(testMode, "test", "production"),
+    mode = executionMode,
     pipelineVersion = pipelineVersion,
-    studyVersion = ifelse(testMode, NULL, pipelineVersion),
+    studyVersion = studyVersion,
     execPath = here::here("exec/results")
   )
   pipelineVersion <- executionContext$getPipelineVersion()
@@ -787,14 +804,20 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     })
   }
   
-  # Create execution settings from first configBlock.
-  # Forwarding pipelineVersion so that dev versions (non-semver) automatically
-  # route cohort generation to the _dev table, leaving the production table untouched.
+  # Create execution settings from first configBlock. The ExecutionContext owns
+  # namespace derivation for the pipeline path, so the legacy suffix is only
+  # forwarded when no context is present.
+  if (is.null(executionContext)) {
+    legacyCohortTableSuffix <- cohortTableSuffix
+  } else {
+    legacyCohortTableSuffix <- NULL
+  }
+
   tryCatch({
     executionSettings <- createExecutionSettingsFromConfig(
       configBlock = configBlock[1],
       pipelineVersion = pipelineVersion,
-      cohortTableSuffix = ifelse(is.null(executionContext), cohortTableSuffix, NULL),
+      cohortTableSuffix = legacyCohortTableSuffix,
       executionContext = executionContext
     )
     cli::cli_alert_success("Execution settings created for config: {configBlock[1]}")
