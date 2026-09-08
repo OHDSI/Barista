@@ -561,14 +561,16 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 
 #' @title Test a Single Study Task
 #' @description Executes a single task in test mode using the supplied
-#'   pipelineVersion as its test namespace.
-#'   Checks that you're not on the main branch, then runs the task with
-#'   checkStatus = TRUE.
-#'   Useful for testing individual task changes before running full pipeline.
+#'   \code{pipelineVersion} as its test namespace. Checks that you are not on the
+#'   main branch, then runs the task with \code{checkStatus = TRUE}. Useful for
+#'   testing individual task changes before running the full pipeline.
 #' @param taskFile Character. The name of the task file (base name only, no path).
 #' @param configBlock Character. The name of the config block to use.
-#' @param pipelineVersion Character. Test namespace used for the task's cohort
-#'   table and output folder. Defaults to \code{"dev"}.
+#' @param pipelineVersion Character. Test namespace for this run — drives the
+#'   cohort table suffix, the \code{exec/results/} folder, and the task-history
+#'   namespace. Defaults to \code{"dev"}. Normalized to lowercase snake_case; an
+#'   over-long namespace is rejected rather than truncated. Use the same value
+#'   here and in \code{testStudyPipeline()}.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns the task result
 #' @export

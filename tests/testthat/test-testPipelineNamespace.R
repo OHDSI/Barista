@@ -12,6 +12,14 @@ testthat::test_that("testStudyPipeline uses pipelineVersion as its namespace", {
   )
 })
 
+testthat::test_that("the removed testLabel argument is a hard error, not silently ignored", {
+  # No compatibility shim and no `...`, so a stray testLabel = fails loudly.
+  testthat::expect_error(
+    testStudyPipeline(configBlock = "any", testLabel = "feature_x"),
+    "unused argument"
+  )
+})
+
 testthat::test_that("testStudyTask accepts the shared pipelineVersion namespace", {
   task_formals <- names(formals(testStudyTask))
 
