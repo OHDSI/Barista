@@ -230,20 +230,6 @@ createExecutionSettings <- function(connectionDetails,
   )
 }
 
-#' @title Does a legacy pipelineVersion string mean "production"?
-#' @description The `pipelineVersion` argument of
-#'   [createExecutionSettingsFromConfig()] carries two meanings: the sentinel
-#'   `"prod"` and any `MAJOR.MINOR.PATCH` version select the configured
-#'   production cohort table unchanged; every other value is a test namespace
-#'   that routes to a suffixed table.
-#' @param pipelineVersion Character.
-#' @return Logical.
-#' @keywords internal
-isProductionPipelineVersion <- function(pipelineVersion) {
-  identical(pipelineVersion, "prod") ||
-    grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
-}
-
 #' @title Create ExecutionSettings from Config Block
 #' @description Load database connection details and execution parameters from config.yml
 #'   and secrets.yml. Schema info (CDM schema, work schema, cohort table, etc.) comes from
@@ -302,11 +288,6 @@ createExecutionSettingsFromConfig <- function(
   checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
   if (!is.null(executionContext)) {
     pipelineVersion <- executionContext$getPipelineVersion()
-    executionMode <- executionContext$getMode()
-  } else if (isProductionPipelineVersion(pipelineVersion)) {
-    executionMode <- "production"
-  } else {
-    executionMode <- "test"
   }
 
   if (!file.exists(configFilePath)) {
@@ -369,24 +350,20 @@ createExecutionSettingsFromConfig <- function(
     stop("'cohortTable' not specified in config or as parameter")
   }
 
-  # Test (non-semver) pipeline versions get a suffixed cohort table so a test run
-  # never touches the production table; semantic versions use the production table
-  # from config unchanged. The mode + namespace rule (and the table-name length
-  # ceiling) live in ExecutionContext$deriveCohortTable() — this is the only
-  # caller-side hook.
-  is_dev_version <- identical(executionMode, "test")
+  # The mode + namespace rule — test suffix, table-name length ceiling, and
+  # production passthrough — lives entirely in ExecutionContext$deriveCohortTable().
+  if (!is.null(cohortTableSuffix) && is.null(executionContext) &&
+      isProductionPipelineVersion(pipelineVersion)) {
+    stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
+  }
 
-  if (is_dev_version) {
-    ctx <- executionContext %||% ExecutionContext$new(
-      mode = "test",
-      pipelineVersion = cohortTableSuffix %||% pipelineVersion
-    )
-    cohortTable <- ctx$deriveCohortTable(cohortTable)
+  ctx <- executionContext %||% newExecutionContext(cohortTableSuffix %||% pipelineVersion)
+  cohortTable <- ctx$deriveCohortTable(cohortTable)
+
+  if (identical(ctx$getMode(), "test")) {
     cli::cli_alert_info(
       "Test pipeline version ({ctx$getPipelineVersion()}) — cohort table set to: {.val {cohortTable}}"
     )
-  } else if (!is.null(cohortTableSuffix)) {
-    stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
   }
 
   # Create and return ExecutionSettings

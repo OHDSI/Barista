@@ -189,3 +189,52 @@ testthat::test_that("resolveResultsPath derives one path from ExecutionSettings 
     as.character(fs::path(execPath, "my_database", "develop_ml", "00_buildCohorts"))
   )
 })
+
+testthat::test_that("ExecutionContext accepts pipelineVersion 'prod' as an untracked production run", {
+  context <- ExecutionContext$new(
+    mode = "production",
+    pipelineVersion = "prod",
+    baseCohortTable = "cohort_table",
+    databaseName = "My Database",
+    execPath = fs::path(tempdir(), "exec", "results")
+  )
+
+  testthat::expect_equal(context$getMode(), "production")
+  testthat::expect_equal(context$getPipelineVersion(), "prod")
+  testthat::expect_null(context$getStudyVersion())
+  testthat::expect_equal(context$getCohortTable(), "cohort_table")
+  testthat::expect_equal(context$deriveCohortTable("other_table"), "other_table")
+})
+
+testthat::test_that("isProductionPipelineVersion classifies 'prod', semver and test namespaces", {
+  testthat::expect_true(isProductionPipelineVersion("prod"))
+  testthat::expect_true(isProductionPipelineVersion("1.2.3"))
+  testthat::expect_false(isProductionPipelineVersion("dev"))
+  testthat::expect_false(isProductionPipelineVersion("develop_ml"))
+  testthat::expect_false(isProductionPipelineVersion("production"))
+})
+
+testthat::test_that("newExecutionContext infers mode from the version string", {
+  test_ctx <- newExecutionContext("develop_ml")
+  testthat::expect_equal(test_ctx$getMode(), "test")
+  testthat::expect_equal(test_ctx$getPipelineVersion(), "develop_ml")
+  testthat::expect_null(test_ctx$getStudyVersion())
+
+  semver_ctx <- newExecutionContext("1.2.3")
+  testthat::expect_equal(semver_ctx$getMode(), "production")
+  testthat::expect_equal(semver_ctx$getStudyVersion(), "1.2.3")
+
+  prod_ctx <- newExecutionContext("prod")
+  testthat::expect_equal(prod_ctx$getMode(), "production")
+  testthat::expect_null(prod_ctx$getStudyVersion())
+})
+
+testthat::test_that("newExecutionContext honours an explicit testMode flag", {
+  # The pipeline passes testMode directly rather than inferring from the string.
+  forced_test <- newExecutionContext("1.2.3", testMode = TRUE)
+  testthat::expect_equal(forced_test$getMode(), "test")
+  testthat::expect_equal(forced_test$getPipelineVersion(), "1_2_3")
+
+  forced_prod <- newExecutionContext("1.0.0", testMode = FALSE)
+  testthat::expect_equal(forced_prod$getMode(), "production")
+})

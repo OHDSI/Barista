@@ -50,10 +50,12 @@ never construct it directly.
       \item{\code{mode}}{Character. Either \code{"test"} or \code{"production"}.}
       \item{\code{pipelineVersion}}{Character. The complete execution pipeline version.
 Defaults to \code{"dev"} for test executions. Test pipeline versions are
-normalized to lowercase snake case; production pipeline versions must
-be semantic versions.}
+normalized to lowercase snake case. Production pipeline versions are
+semantic versions, or the literal \code{"prod"} for a production run against
+the configured table whose version is not tracked.}
       \item{\code{studyVersion}}{Character or \code{NULL}. The study version associated with
-the execution. Required for production and optional for test runs.}
+the execution. Required for a semantic-version production run; \code{NULL} for
+test runs and for \code{pipelineVersion = "prod"}.}
       \item{\code{baseCohortTable}}{Character or \code{NULL}. The configured, unsuffixed
 cohort table. Optional for a run-scoped context shared by multiple
 database config blocks.}

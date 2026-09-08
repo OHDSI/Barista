@@ -701,20 +701,9 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     pipelineVersion <- paste0(versionParts, collapse = ".")
   }
 
-  # Interpret pipelineVersion by mode: a test namespace has no study version,
-  # a production run's study version is the semantic pipelineVersion itself.
-  if (testMode) {
-    executionMode <- "test"
-    studyVersion <- NULL
-  } else {
-    executionMode <- "production"
-    studyVersion <- pipelineVersion
-  }
-
-  executionContext <- ExecutionContext$new(
-    mode = executionMode,
-    pipelineVersion = pipelineVersion,
-    studyVersion = studyVersion,
+  executionContext <- newExecutionContext(
+    pipelineVersion,
+    testMode = testMode,
     execPath = here::here("exec/results")
   )
   pipelineVersion <- executionContext$getPipelineVersion()

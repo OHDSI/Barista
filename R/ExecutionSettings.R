@@ -302,6 +302,63 @@ normalizePipelineVersion <- function(pipelineVersion) {
   normalized
 }
 
+#' @title Classify a pipeline version string as production or test
+#' @description A `pipelineVersion` string carries its own mode: the sentinel
+#'   `"prod"` and any `MAJOR.MINOR.PATCH` string mean a production run against
+#'   the configured cohort table; every other value (`"dev"`, `"develop_ml"`, …)
+#'   is a test namespace. This is the single classifier used by
+#'   [newExecutionContext()], [createExecutionSettingsFromConfig()], and the
+#'   results-path helpers.
+#' @param pipelineVersion Character.
+#' @return Logical. `TRUE` for a production version.
+#' @keywords internal
+isProductionPipelineVersion <- function(pipelineVersion) {
+  identical(pipelineVersion, "prod") ||
+    grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
+}
+
+#' @title Build an ExecutionContext from a pipeline version string
+#' @description The single place that turns a raw `pipelineVersion` into an
+#'   [ExecutionContext]: it classifies the mode (unless `testMode` forces it) and
+#'   derives `studyVersion`, so callers never hand-roll `mode = ` /
+#'   `studyVersion = `.
+#' @param pipelineVersion Character. A semantic version, `"prod"`, or a test
+#'   namespace.
+#' @param testMode Logical or `NULL`. `NULL` (default) infers the mode from
+#'   `pipelineVersion` via [isProductionPipelineVersion()]; `TRUE`/`FALSE` forces
+#'   it (used by the pipeline, which already knows).
+#' @param databaseName Character or `NULL`. Passed through to `ExecutionContext`.
+#' @param execPath Character. Base results path. Passed through.
+#' @return An `ExecutionContext`.
+#' @keywords internal
+newExecutionContext <- function(pipelineVersion,
+                                testMode = NULL,
+                                databaseName = NULL,
+                                execPath = here::here("exec/results")) {
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
+  checkmate::assert_logical(testMode, len = 1, null.ok = TRUE)
+
+  is_test <- if (is.null(testMode)) {
+    !isProductionPipelineVersion(pipelineVersion)
+  } else {
+    isTRUE(testMode)
+  }
+
+  study_version <- if (is_test || identical(pipelineVersion, "prod")) {
+    NULL
+  } else {
+    pipelineVersion
+  }
+
+  ExecutionContext$new(
+    mode = if (is_test) "test" else "production",
+    pipelineVersion = pipelineVersion,
+    studyVersion = study_version,
+    databaseName = databaseName,
+    execPath = execPath
+  )
+}
+
 #' @title ExecutionContext
 #' @description
 #'
@@ -321,10 +378,12 @@ ExecutionContext <- R6::R6Class(
     #' @param mode Character. Either `"test"` or `"production"`.
     #' @param pipelineVersion Character. The complete execution pipeline version.
     #'   Defaults to `"dev"` for test executions. Test pipeline versions are
-    #'   normalized to lowercase snake case; production pipeline versions must
-    #'   be semantic versions.
+    #'   normalized to lowercase snake case. Production pipeline versions are
+    #'   semantic versions, or the literal `"prod"` for a production run against
+    #'   the configured table whose version is not tracked.
     #' @param studyVersion Character or `NULL`. The study version associated with
-    #'   the execution. Required for production and optional for test runs.
+    #'   the execution. Required for a semantic-version production run; `NULL` for
+    #'   test runs and for `pipelineVersion = "prod"`.
     #' @param baseCohortTable Character or `NULL`. The configured, unsuffixed
     #'   cohort table. Optional for a run-scoped context shared by multiple
     #'   database config blocks.
@@ -350,7 +409,11 @@ ExecutionContext <- R6::R6Class(
       checkmate::assert_string(execPath, min.chars = 1)
       checkmate::assert_int(maxTableNameLength, lower = 1, null.ok = TRUE)
 
-      if (mode == "production") {
+      if (mode == "production" && identical(pipelineVersion, "prod")) {
+        # Production run against the configured table, version untracked.
+        checkmate::assert_string(studyVersion, min.chars = 1, null.ok = TRUE)
+        normalized_pipeline_version <- "prod"
+      } else if (mode == "production") {
         checkmate::assert_string(studyVersion, min.chars = 1)
         if (!grepl("^\\d+\\.\\d+\\.\\d+$", studyVersion)) {
           cli::cli_abort("Production studyVersion must use MAJOR.MINOR.PATCH format.")
@@ -488,21 +551,8 @@ resolveResultsPath <- function(executionSettings,
   checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
 
   if (is.null(executionContext)) {
-    checkmate::assert_string(pipelineVersion, min.chars = 1)
-
-    isSemver <- grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
-    if (isSemver) {
-      executionMode <- "production"
-      studyVersion <- pipelineVersion
-    } else {
-      executionMode <- "test"
-      studyVersion <- NULL
-    }
-
-    executionContext <- ExecutionContext$new(
-      mode = executionMode,
-      pipelineVersion = pipelineVersion,
-      studyVersion = studyVersion,
+    executionContext <- newExecutionContext(
+      pipelineVersion,
       databaseName = executionSettings$databaseName,
       execPath = execPath
     )
