@@ -546,11 +546,14 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 }
 
 #' @title Test a Single Study Task
-#' @description Executes a single task in test mode using the "dev" pipeline version.
+#' @description Executes a single task in test mode using the supplied
+#'   pipelineVersion as its test namespace.
 #'   Checks that you're not on main branch, then runs the task with checkStatus = TRUE.
 #'   Useful for testing individual task changes before running full pipeline.
 #' @param taskFile Character. The name of the task file (base name only, no path).
 #' @param configBlock Character. The name of the config block to use.
+#' @param pipelineVersion Character. Test namespace used for the task's cohort
+#'   table and output folder. Defaults to \code{"dev"}.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns the task result
 #' @export
@@ -559,9 +562,17 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 #' # Test a task on develop branch
 #' testStudyTask("01_generate_cohorts.R", configBlock = "myConfig")
 #' }
-testStudyTask <- function(taskFile, configBlock, env = rlang::caller_env()) {
+testStudyTask <- function(
+  taskFile, 
+  configBlock, 
+  pipelineVersion = "dev",
+  env = rlang::caller_env()
+) {
   checkmate::assert_string(taskFile, min.chars = 1)
   checkmate::assert_string(configBlock, min.chars = 1)
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
+
+  pipelineVersion <- normalizeTestPipelineVersionLabel(pipelineVersion)
   
   # Check branch
   branch <- get_current_branch()
@@ -574,19 +585,19 @@ testStudyTask <- function(taskFile, configBlock, env = rlang::caller_env()) {
   
   cli::cli_rule("TEST Mode: Study Task")
   cli::cli_alert_warning("Testing on branch: {branch}")
-  cli::cli_alert_info("Using DEV version for test run")
+  cli::cli_alert_info("Using test pipeline version: {pipelineVersion}")
   
   execute_task(
     taskFile = taskFile,
     configBlock = configBlock,
-    pipelineVersion = "dev",
+    pipelineVersion = pipelineVersion,
     checkStatus = TRUE,
     env = env
   )
 }
 
 #' @keywords internal
-normalizeTestNamespaceLabel <- function(label, maxChars = 24) {
+normalizeTestPipelineVersionLabel <- function(label, maxChars = 24) {
   checkmate::assert_string(label, min.chars = 1)
   checkmate::assert_int(maxChars, lower = 1)
 
@@ -644,13 +655,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     if (is.null(pipelineVersionOverride)) {
       pipelineVersion <- "dev"
     } else {
-      pipelineVersion <- normalizeTestNamespaceLabel(pipelineVersionOverride)
+      pipelineVersion <- normalizeTestPipelineVersionLabel(pipelineVersionOverride)
     }
 
     if (is.null(cohortTableSuffix)) {
-      cohortTableSuffixResolved <- normalizeTestNamespaceLabel(pipelineVersion)
+      cohortTableSuffixResolved <- normalizeTestPipelineVersionLabel(pipelineVersion)
     } else {
-      cohortTableSuffixResolved <- normalizeTestNamespaceLabel(cohortTableSuffix)
+      cohortTableSuffixResolved <- normalizeTestPipelineVersionLabel(cohortTableSuffix)
     }
 
     currentVersion <- NULL
@@ -917,13 +928,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 }
 
 #' @title Test Study Pipeline
-#' @description Executes the full study pipeline in test mode using the "dev" pipeline version.
-#'   Skips all git validation, renv checks, and version management. Useful for iterative 
-#'   testing during development.
+#' @description Executes the full study pipeline in test mode. The
+#'   pipelineVersion value is interpreted as the test namespace and is
+#'   used for test cohort tables and output folders.
 #' @param configBlock Character or character vector. Name(s) of config block(s) to use.
-#' @param testLabel Character. Label used for test output folder and cohort table suffix.
-#'   Defaults to \code{"dev"}. Label is normalized to lowercase snake_case and
-#'   truncated to 24 characters.
+#' @param pipelineVersion Character. Test namespace used for output folders and
+#'   cohort table suffix. Defaults to \code{"dev"}. The value is normalized to
+#'   lowercase snake_case and truncated to 24 characters.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns task results list
 #' @export
@@ -932,13 +943,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 #' # Test full pipeline on develop branch
 #' testStudyPipeline(configBlock = "myConfig")
 #' # Test full pipeline with a custom namespace
-#' testStudyPipeline(configBlock = "myConfig", testLabel = "feature_ml_test")
+#' testStudyPipeline(configBlock = "myConfig", pipelineVersion = "feature_ml_test")
 #' }
-testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::caller_env()) {
+testStudyPipeline <- function(configBlock, pipelineVersion = "dev", env = rlang::caller_env()) {
   checkmate::assert_character(configBlock, min.len = 1, any.missing = FALSE)
-  checkmate::assert_string(testLabel, min.chars = 1)
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
 
-  testLabel <- normalizeTestNamespaceLabel(testLabel)
+  pipelineVersion <- normalizeTestPipelineVersionLabel(pipelineVersion)
   
   # Check branch
   branch <- get_current_branch()
@@ -951,13 +962,13 @@ testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::calle
   
   cli::cli_rule("TEST Mode: Study Pipeline")
   cli::cli_alert_warning("Testing on branch: {branch}")
-  cli::cli_alert_info("Using test label: {testLabel}")
+  cli::cli_alert_info("Using test pipeline version: {pipelineVersion}")
   
   execute_pipeline(
     configBlock = configBlock,
     testMode = TRUE,
-    pipelineVersionOverride = testLabel,
-    cohortTableSuffix = testLabel,
+    pipelineVersionOverride = pipelineVersion,
+    cohortTableSuffix = pipelineVersion,
     skipRenv = TRUE,
     env = env
   )

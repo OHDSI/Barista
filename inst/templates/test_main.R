@@ -60,9 +60,12 @@ cli::cli_alert_info("Setting course for database sectors: {{paste(dbIds, collaps
 
 cli::cli_h2("Initiating test flight sequence...")
 
+# Test namespace. Use a distinct value per analyst when sharing a database schema.
+pipelineVersion <- "dev"
+
 taskResults <- testStudyPipeline(
   configBlock = dbIds,
-  skipRenv = FALSE  # Set to TRUE only if you've manually verified environment
+  pipelineVersion = pipelineVersion
 )
 
 cli::cli_h2("Test flight complete - all systems performing nominally.")
