@@ -412,11 +412,12 @@ formatErrorDetail <- function(e) {
 #'   manifest is not re-loaded for every task. Recorded with the run and used
 #'   for the rerun check.
 #' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied it owns namespace derivation (cohort-table suffix, results
+#'   folder) and `pipelineVersion` is taken from it.
 #' @keywords internal
 execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
                          checkStatus = FALSE,
                          env = rlang::caller_env(),
-                         cohortTableSuffix = NULL,
                          codeState = NULL,
                          logFilePath = NULL,
                          cohortManifestHash = NULL,
@@ -460,18 +461,12 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
   # Check task status if requested
   if (checkStatus) {
     # Build execution settings from configBlock. When an ExecutionContext is
-    # supplied it owns namespace derivation, so the legacy suffix is not passed.
-    if (is.null(executionContext)) {
-      legacyCohortTableSuffix <- cohortTableSuffix
-    } else {
-      legacyCohortTableSuffix <- NULL
-    }
-
+    # supplied it owns namespace derivation; otherwise the non-semver
+    # pipelineVersion is used as the test cohort-table suffix.
     tryCatch({
       executionSettings <- createExecutionSettingsFromConfig(
         configBlock = configBlock,
         pipelineVersion = pipelineVersion,
-        cohortTableSuffix = legacyCohortTableSuffix,
         executionContext = executionContext
       )
     }, error = function(e) {
@@ -646,10 +641,10 @@ testStudyTask <- function(
 #' @param skipCodeStateCheck Logical. If TRUE, skips the code-state check
 #'   entirely. Default: FALSE
 #' @param env the execution environment
-#' @param pipelineVersionOverride Character. Optional test-mode override for
-#'   the pipeline version folder label.
-#' @param cohortTableSuffix Character. Optional test-mode suffix used for
-#'   cohort table names.
+#' @param pipelineVersionOverride Character. Optional test-mode override for the
+#'   pipeline version (the test namespace). Drives the cohort-table suffix, the
+#'   results folder, and the task-history namespace via the run's
+#'   `ExecutionContext`.
 #' @return Invisibly returns task results list
 #' @keywords internal
 execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
@@ -657,8 +652,7 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
                              ignoreUncommittedPaths = NULL,
                              skipCodeStateCheck = FALSE,
                              env = rlang::caller_env(),
-                             pipelineVersionOverride = NULL,
-                             cohortTableSuffix = NULL) {
+                             pipelineVersionOverride = NULL) {
   
   # Compute prospective pipeline version (needed for pre-flight checks)
   if (testMode) {
@@ -668,24 +662,12 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
       pipelineVersion <- normalizePipelineVersion(pipelineVersionOverride)
     }
 
-    if (is.null(cohortTableSuffix)) {
-      cohortTableSuffixResolved <- normalizePipelineVersion(pipelineVersion)
-    } else {
-      cohortTableSuffixResolved <- normalizePipelineVersion(cohortTableSuffix)
-    }
-
     currentVersion <- NULL
     incrementLabel <- NULL
   } else {
     if (!is.null(pipelineVersionOverride)) {
       cli::cli_abort("pipelineVersionOverride is only supported when testMode = TRUE")
     }
-
-    if (!is.null(cohortTableSuffix)) {
-      cli::cli_abort("cohortTableSuffix is only supported when testMode = TRUE")
-    }
-
-    cohortTableSuffixResolved <- NULL
 
     # Validate updateType
     updateType <- tolower(trimws(updateType))
@@ -783,19 +765,11 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
   }
   
   # Create execution settings from first configBlock. The ExecutionContext owns
-  # namespace derivation for the pipeline path, so the legacy suffix is only
-  # forwarded when no context is present.
-  if (is.null(executionContext)) {
-    legacyCohortTableSuffix <- cohortTableSuffix
-  } else {
-    legacyCohortTableSuffix <- NULL
-  }
-
+  # namespace derivation (cohort-table suffix, results folder, task history).
   tryCatch({
     executionSettings <- createExecutionSettingsFromConfig(
       configBlock = configBlock[1],
       pipelineVersion = pipelineVersion,
-      cohortTableSuffix = legacyCohortTableSuffix,
       executionContext = executionContext
     )
     cli::cli_alert_success("Execution settings created for config: {configBlock[1]}")
@@ -896,7 +870,6 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
           taskFile = taskName,
           configBlock = configBlock[db],
           pipelineVersion = pipelineVersion,
-          cohortTableSuffix = cohortTableSuffixResolved,
           checkStatus = TRUE,
           env = env,
           codeState = codeState,
@@ -1007,7 +980,6 @@ testStudyPipeline <- function(configBlock, pipelineVersion = "dev", env = rlang:
     configBlock = configBlock,
     testMode = TRUE,
     pipelineVersionOverride = pipelineVersion,
-    cohortTableSuffix = pipelineVersion,
     skipRenv = TRUE,
     env = env
   )
