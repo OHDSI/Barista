@@ -77,6 +77,22 @@ testthat::test_that("ExecutionContext does not revalidate production table lengt
   )
 })
 
+testthat::test_that("ExecutionContext supports a run shared by multiple databases", {
+  context <- ExecutionContext$new(
+    mode = "test",
+    pipelineVersion = "develop_ml",
+    execPath = fs::path(tempdir(), "exec", "results")
+  )
+
+  testthat::expect_null(context$getCohortTable())
+  testthat::expect_equal(
+    context$getResultsPath(databaseName = "Database One", taskName = "01_task"),
+    fs::path(
+      tempdir(), "exec", "results", "database_one", "develop_ml", "01_task"
+    )
+  )
+})
+
 testthat::test_that("ExecutionContext defaults test pipelineVersion to dev", {
   context <- ExecutionContext$new(
     mode = "test",

@@ -200,13 +200,20 @@ updateStudyVersion <- function(versionNumber, projectPath = here::here()) {
 #'   Output will be saved to \code{exec/results/{databaseName}/{pipelineVersion}/00_buildCohorts/}.
 #'   Non-semver values (e.g. "dev") also trigger dev cohort table routing via
 #'   \code{createExecutionSettingsFromConfig()}.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied, its pipeline version and result-path rules are used.
 #' @param override Logical. If TRUE, skips the user confirmation prompt and proceeds
 #'   directly with cohort generation. Defaults to FALSE.
 #' @return Invisibly returns the cohort counts data frame (id, label, tags, 
 #'   cohort_entries, cohort_subjects). Also saves counts to cohortCounts.csv in the 
 #'   output folder.
 #' @export
-generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE) {
+generateCohorts <- function(executionSettings, pipelineVersion,
+                            executionContext = NULL, override = FALSE) {
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
   
   # Check if cohortManifest exists
   cohortsFolderPath <- here::here("inputs/cohorts")
@@ -312,12 +319,19 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
     databaseName <- executionSettings$databaseName
     dbNameSnake <- snakecase::to_snake_case(databaseName)
     
-    outputFolder <- fs::path(
-      here::here("exec/results"),
-      dbNameSnake,
-      pipelineVersion,
-      "00_buildCohorts"
-    )
+    outputFolder <- if (is.null(executionContext)) {
+      fs::path(
+        here::here("exec/results"),
+        dbNameSnake,
+        pipelineVersion,
+        "00_buildCohorts"
+      )
+    } else {
+      executionContext$getResultsPath(
+        taskName = "00_buildCohorts",
+        databaseName = databaseName
+      )
+    }
     
     # Create output folder if it doesn't exist
     if (!dir.exists(outputFolder)) {
@@ -397,6 +411,7 @@ formatErrorDetail <- function(e) {
 #'   here; \code{execute_pipeline()} computes it once and passes it in so the
 #'   manifest is not re-loaded for every task. Recorded with the run and used
 #'   for the rerun check.
+#' @param executionContext An optional `ExecutionContext` for the current run.
 #' @keywords internal
 execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
                          checkStatus = FALSE,
@@ -404,7 +419,13 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
                          cohortTableSuffix = NULL,
                          codeState = NULL,
                          logFilePath = NULL,
-                         cohortManifestHash = NULL) {
+                         cohortManifestHash = NULL,
+                         executionContext = NULL) {
+
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
 
   commitSha <- codeState$sha %||% NA_character_
   codeStateLabel <- codeState$status %||% "unrecorded"
@@ -720,6 +741,14 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     pipelineVersion <- paste0(versionParts, collapse = ".")
   }
 
+  executionContext <- ExecutionContext$new(
+    mode = ifelse(testMode, "test", "production"),
+    pipelineVersion = pipelineVersion,
+    studyVersion = ifelse(testMode, NULL, pipelineVersion),
+    execPath = here::here("exec/results")
+  )
+  pipelineVersion <- executionContext$getPipelineVersion()
+
   # Run all pre-flight checks — consolidated banner before any execution
   preFlightResult <- runPreflightChecks(
     configBlock = configBlock,
@@ -830,6 +859,7 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     generateCohorts(
       executionSettings = executionSettings,
       pipelineVersion = pipelineVersion,
+      executionContext = executionContext,
       override = TRUE
     )
   }, error = function(e) {
@@ -868,7 +898,8 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
           env = env,
           codeState = codeState,
           logFilePath = logFilePath,
-          cohortManifestHash = cohortManifestHash
+          cohortManifestHash = cohortManifestHash,
+          executionContext = executionContext
         )
         
         appendLogLine(logFilePath, glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] ✓ Task completed successfully"))

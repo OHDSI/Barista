@@ -286,9 +286,12 @@ ExecutionContext <- R6::R6Class(
     #'   be semantic versions.
     #' @param studyVersion Character or `NULL`. The study version associated with
     #'   the execution. Required for production and optional for test runs.
-    #' @param baseCohortTable Character. The configured, unsuffixed cohort table.
-    #' @param databaseName Character. Human-readable database name used in result
-    #'   paths.
+    #' @param baseCohortTable Character or `NULL`. The configured, unsuffixed
+    #'   cohort table. Optional for a run-scoped context shared by multiple
+    #'   database config blocks.
+    #' @param databaseName Character or `NULL`. Human-readable database name
+    #'   used in result paths. Optional for a run-scoped context shared by
+    #'   multiple database config blocks.
     #' @param execPath Character. Base path for execution results. Defaults to
     #'   `exec/results` in the current study project.
     #' @param maxTableNameLength Integer. Maximum permitted length of the derived
@@ -297,14 +300,14 @@ ExecutionContext <- R6::R6Class(
     initialize = function(mode = c("test", "production"),
                           pipelineVersion = "dev",
                           studyVersion = NULL,
-                          baseCohortTable,
-                          databaseName,
+                          baseCohortTable = NULL,
+                          databaseName = NULL,
                           execPath = here::here("exec/results"),
                           maxTableNameLength = 60L) {
       mode <- match.arg(mode)
       checkmate::assert_string(pipelineVersion, min.chars = 1)
-      checkmate::assert_string(baseCohortTable, min.chars = 1)
-      checkmate::assert_string(databaseName, min.chars = 1)
+      checkmate::assert_string(baseCohortTable, min.chars = 1, null.ok = TRUE)
+      checkmate::assert_string(databaseName, min.chars = 1, null.ok = TRUE)
       checkmate::assert_string(execPath, min.chars = 1)
       checkmate::assert_int(maxTableNameLength, lower = 1, null.ok = TRUE)
 
@@ -320,11 +323,16 @@ ExecutionContext <- R6::R6Class(
         cohort_table <- baseCohortTable
       } else {
         normalized_pipeline_version <- private$normalize_pipeline_version(pipelineVersion)
-        cohort_table <- paste0(baseCohortTable, "_", normalized_pipeline_version)
+        cohort_table <- if (is.null(baseCohortTable)) {
+          NULL
+        } else {
+          paste0(baseCohortTable, "_", normalized_pipeline_version)
+        }
       }
 
       if (!is.null(maxTableNameLength) &&
           mode == "test" &&
+          !is.null(cohort_table) &&
           nchar(cohort_table) > maxTableNameLength) {
         cli::cli_abort(c(
           "Derived cohort table name is too long.",
@@ -359,18 +367,22 @@ ExecutionContext <- R6::R6Class(
       private$.studyVersion
     },
 
-    #' @return Character. Effective cohort table name for this execution.
+    #' @return Character or `NULL`. Effective cohort table name for this
+    #'   execution, or `NULL` for a run-scoped context without a database.
     getCohortTable = function() {
       private$.cohortTable
     },
 
     #' @param taskName Character. Task folder or file name.
+    #' @param databaseName Character or `NULL`. Database name to use when the
+    #'   context is shared across multiple config blocks.
     #' @return Character. Absolute result path for the supplied task.
-    getResultsPath = function(taskName = NULL) {
+    getResultsPath = function(taskName = NULL, databaseName = private$.databaseName) {
       checkmate::assert_string(taskName, null.ok = TRUE)
+      checkmate::assert_string(databaseName, min.chars = 1)
       path <- fs::path(
         private$.execPath,
-        snakecase::to_snake_case(private$.databaseName),
+        snakecase::to_snake_case(databaseName),
         private$.pipelineVersion
       )
       if (!is.null(taskName)) {
