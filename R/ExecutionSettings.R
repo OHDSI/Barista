@@ -280,9 +280,10 @@ ExecutionContext <- R6::R6Class(
   classname = "ExecutionContext",
   public = list(
     #' @param mode Character. Either `"test"` or `"production"`.
-    #' @param pipelineVersion Character. The complete execution pipeline version. Test
-    #'   pipeline versions are normalized to lowercase snake case; production pipeline versions
-    #'   must be semantic versions.
+    #' @param pipelineVersion Character. The complete execution pipeline version.
+    #'   Defaults to `"dev"` for test executions. Test pipeline versions are
+    #'   normalized to lowercase snake case; production pipeline versions must
+    #'   be semantic versions.
     #' @param studyVersion Character or `NULL`. The study version associated with
     #'   the execution. Required for production and optional for test runs.
     #' @param baseCohortTable Character. The configured, unsuffixed cohort table.
@@ -294,7 +295,7 @@ ExecutionContext <- R6::R6Class(
     #'   cohort table name. Defaults to 60, a practical cross-database limit for
     #'   test-derived names. Set to `NULL` to disable this package-level check.
     initialize = function(mode = c("test", "production"),
-                          pipelineVersion,
+                          pipelineVersion = "dev",
                           studyVersion = NULL,
                           baseCohortTable,
                           databaseName,
@@ -322,7 +323,7 @@ ExecutionContext <- R6::R6Class(
         cohort_table <- paste0(baseCohortTable, "_", normalized_pipeline_version)
       }
 
-        if (!is.null(maxTableNameLength) &&
+      if (!is.null(maxTableNameLength) &&
           mode == "test" &&
           nchar(cohort_table) > maxTableNameLength) {
         cli::cli_abort(c(

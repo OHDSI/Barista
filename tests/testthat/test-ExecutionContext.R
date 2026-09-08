@@ -76,3 +76,15 @@ testthat::test_that("ExecutionContext does not revalidate production table lengt
     "an_existing_production_cohort_table_name"
   )
 })
+
+testthat::test_that("ExecutionContext defaults test pipelineVersion to dev", {
+  context <- ExecutionContext$new(
+    mode = "test",
+    baseCohortTable = "cohort_table",
+    databaseName = "My Database",
+    execPath = fs::path(tempdir(), "exec", "results")
+  )
+
+  testthat::expect_equal(context$getPipelineVersion(), "dev")
+  testthat::expect_equal(context$getCohortTable(), "cohort_table_dev")
+})
