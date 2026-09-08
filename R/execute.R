@@ -548,7 +548,8 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 #' @title Test a Single Study Task
 #' @description Executes a single task in test mode using the supplied
 #'   pipelineVersion as its test namespace.
-#'   Checks that you're not on main branch, then runs the task with checkStatus = TRUE.
+#'   Checks that you're not on the main branch, then runs the task with
+#'   checkStatus = TRUE.
 #'   Useful for testing individual task changes before running full pipeline.
 #' @param taskFile Character. The name of the task file (base name only, no path).
 #' @param configBlock Character. The name of the config block to use.
@@ -624,8 +625,10 @@ normalizeTestPipelineVersionLabel <- function(label, maxChars = 24) {
 #' @param configBlock name of one or multiple configBlock to use in the execution
 #' @param updateType the type of version increment: 'major', 'minor', or 'patch'. 
 #'   Only used when testMode = FALSE.
-#' @param testMode Logical. If TRUE, skips all validations and uses "dev" version.
-#'   If FALSE, enforces code validation and version management. Default: FALSE
+#' @param testMode Logical. If TRUE, uses test namespace/version handling and
+#'   skips production version management. Public test entry points still apply
+#'   the main-branch guard. If FALSE, enforces production version management.
+#'   Default: FALSE
 #' @param skipRenv Logical. If TRUE, skips renv validation. Default: FALSE
 #' @param skipConnectivityCheck Logical. If TRUE (default), skips the optional
 #'   database connectivity pre-flight check. Set to FALSE to attempt a test
@@ -930,7 +933,8 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 #' @title Test Study Pipeline
 #' @description Executes the full study pipeline in test mode. The
 #'   pipelineVersion value is interpreted as the test namespace and is
-#'   used for test cohort tables and output folders.
+#'   used for test cohort tables and output folders. Test runs are allowed on
+#'   development branches but rejected on the main branch.
 #' @param configBlock Character or character vector. Name(s) of config block(s) to use.
 #' @param pipelineVersion Character. Test namespace used for output folders and
 #'   cohort table suffix. Defaults to \code{"dev"}. The value is normalized to
