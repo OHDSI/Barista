@@ -61,6 +61,20 @@ testthat::test_that("ExecutionContext rejects oversized cohort table names", {
   )
 })
 
+testthat::test_that("ExecutionContext default table-length ceiling is the shared constant", {
+  base <- paste(rep("x", MAX_TEST_COHORT_TABLE_NAME_LENGTH), collapse = "")
+
+  testthat::expect_error(
+    ExecutionContext$new(
+      mode = "test",
+      pipelineVersion = "develop_ml",
+      baseCohortTable = base,
+      databaseName = "My Database"
+    ),
+    "Derived cohort table name is too long"
+  )
+})
+
 testthat::test_that("ExecutionContext does not revalidate production table length", {
   context <- ExecutionContext$new(
     mode = "production",
@@ -103,4 +117,15 @@ testthat::test_that("ExecutionContext defaults test pipelineVersion to dev", {
 
   testthat::expect_equal(context$getPipelineVersion(), "dev")
   testthat::expect_equal(context$getCohortTable(), "cohort_table_dev")
+})
+
+testthat::test_that("normalizePipelineVersion lowercases and snake-cases without truncating", {
+  testthat::expect_equal(normalizePipelineVersion("Develop ML"), "develop_ml")
+  testthat::expect_equal(normalizePipelineVersion("  feature/ABC-123  "), "feature_abc_123")
+  testthat::expect_equal(normalizePipelineVersion("__dev__"), "dev")
+
+  long <- paste(rep("namespace", 6), collapse = "_")
+  testthat::expect_equal(normalizePipelineVersion(long), long)
+
+  testthat::expect_error(normalizePipelineVersion("---"), "at least one letter or number")
 })

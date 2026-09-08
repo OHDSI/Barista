@@ -268,6 +268,40 @@ ExecutionSettings <- R6::R6Class(
   )
 )
 
+# Practical cross-database ceiling for a derived (test) cohort table name.
+# Some platforms cap identifiers well below this; 60 is the package-level guard
+# and is overridable per `ExecutionContext`.
+MAX_TEST_COHORT_TABLE_NAME_LENGTH <- 60L
+
+#' @title Normalize a test pipeline version (namespace)
+#' @description Canonical normalization for a test-mode `pipelineVersion`: the
+#'   value is lowercased and every run of non-alphanumeric characters collapses
+#'   to a single underscore, with leading and trailing underscores removed. The
+#'   result is used verbatim as the cohort-table suffix, the results-folder
+#'   segment, and the task-history namespace, so all three always agree.
+#'
+#'   This does **not** truncate. An over-long namespace fails loudly (via the
+#'   [ExecutionContext] cohort-table length check) rather than being silently
+#'   shortened into a name that no longer matches the folder it was derived
+#'   alongside.
+#' @param pipelineVersion Character. The user-supplied test namespace.
+#' @return Character. The normalized namespace.
+#' @keywords internal
+normalizePipelineVersion <- function(pipelineVersion) {
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
+
+  normalized <- tolower(trimws(pipelineVersion))
+  normalized <- gsub("[^a-z0-9]+", "_", normalized)
+  normalized <- gsub("^_+|_+$", "", normalized)
+  normalized <- gsub("_+", "_", normalized)
+
+  if (!nzchar(normalized)) {
+    cli::cli_abort("Test pipeline version must contain at least one letter or number.")
+  }
+
+  normalized
+}
+
 #' @title ExecutionContext
 #' @description
 #'
@@ -302,7 +336,7 @@ ExecutionContext <- R6::R6Class(
                           baseCohortTable = NULL,
                           databaseName = NULL,
                           execPath = here::here("exec/results"),
-                          maxTableNameLength = 60L) {
+                          maxTableNameLength = MAX_TEST_COHORT_TABLE_NAME_LENGTH) {
       mode <- match.arg(mode)
       checkmate::assert_string(pipelineVersion, min.chars = 1)
       checkmate::assert_string(baseCohortTable, min.chars = 1, null.ok = TRUE)
@@ -321,7 +355,7 @@ ExecutionContext <- R6::R6Class(
         normalized_pipeline_version <- pipelineVersion
         cohort_table <- baseCohortTable
       } else {
-        normalized_pipeline_version <- private$normalize_pipeline_version(pipelineVersion)
+        normalized_pipeline_version <- normalizePipelineVersion(pipelineVersion)
         cohort_table <- if (is.null(baseCohortTable)) {
           NULL
         } else {
@@ -399,19 +433,6 @@ ExecutionContext <- R6::R6Class(
     .cohortTable = NULL,
     .databaseName = NULL,
     .execPath = NULL,
-    .maxTableNameLength = NULL,
-
-    normalize_pipeline_version = function(pipelineVersion) {
-      normalized <- tolower(trimws(pipelineVersion))
-      normalized <- gsub("[^a-z0-9]+", "_", normalized)
-      normalized <- gsub("^_+|_+$", "", normalized)
-      normalized <- gsub("_+", "_", normalized)
-
-      if (!nzchar(normalized)) {
-        cli::cli_abort("Test pipeline version must contain at least one letter or number.")
-      }
-
-      return(normalized)
-    }
+    .maxTableNameLength = NULL
   )
 )

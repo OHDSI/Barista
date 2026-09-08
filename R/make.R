@@ -245,9 +245,10 @@ createExecutionSettings <- function(connectionDetails,
 #' @param databaseName Character. Override for human-readable database name.
 #' @param pipelineVersion Character. Pipeline version ("prod" for production table, "dev" or "0.0.1" etc.).
 #' @param cohortTableSuffix Character. Optional suffix for cohort table names in
-#'   non-semver (test) runs. Normalized to lowercase snake_case and truncated to
-#'   24 characters. If NULL, the non-semver \code{pipelineVersion} is used as
-#'   the suffix.
+#'   non-semver (test) runs. Normalized to lowercase snake_case via
+#'   \code{normalizePipelineVersion()}. If NULL, the non-semver
+#'   \code{pipelineVersion} is used as the suffix. The derived table name is
+#'   rejected if it exceeds \code{MAX_TEST_COHORT_TABLE_NAME_LENGTH} characters.
 #' @param executionContext An optional `ExecutionContext` for the current run.
 #'   When supplied, its mode and normalized `pipelineVersion` control cohort
 #'   table routing. The legacy `pipelineVersion` and `cohortTableSuffix`
@@ -352,57 +353,37 @@ createExecutionSettingsFromConfig <- function(
     stop("'cohortTable' not specified in config or as parameter")
   }
 
-  # Route to dev cohort table for any non-semver pipeline version (e.g. "dev", "test").
-  # Semantic versions ("1.0.0", "2.1.3") always use the production table from config.
+  # Test (non-semver) pipeline versions get a suffixed cohort table so a test run
+  # never touches the production table. Semantic versions ("1.0.0", "2.1.3") use
+  # the production table from config unchanged. Suffix normalization is shared
+  # with the results-folder and task-history namespace via normalizePipelineVersion().
   is_dev_version <- identical(executionMode, "test")
 
-  if (!is.null(executionContext)) {
-    if (is_dev_version) {
-      cohortTable <- paste0(cohortTable, "_", pipelineVersion)
-      cli::cli_alert_info(
-        "Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}"
-      )
-    }
-  } else if (!is.null(cohortTableSuffix)) {
-    if (!is_dev_version) {
-      stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
-    }
-
-    suffix <- tolower(trimws(cohortTableSuffix))
-    suffix <- gsub("[^a-z0-9]+", "_", suffix)
-    suffix <- gsub("^_+|_+$", "", suffix)
-    suffix <- gsub("_+", "_", suffix)
-
-    if (suffix == "") {
-      stop("cohortTableSuffix must contain at least one letter or number")
-    }
-
-    if (nchar(suffix) > 24) {
-      suffix <- substr(suffix, 1, 24)
-      cli::cli_alert_warning("cohortTableSuffix truncated to 24 characters: {.val {suffix}}")
+  if (is_dev_version) {
+    if (!is.null(executionContext)) {
+      # The context already owns normalization; its pipelineVersion is the suffix.
+      suffix <- pipelineVersion
+    } else if (!is.null(cohortTableSuffix)) {
+      suffix <- normalizePipelineVersion(cohortTableSuffix)
+    } else {
+      suffix <- normalizePipelineVersion(pipelineVersion)
     }
 
     cohortTable <- paste0(cohortTable, "_", suffix)
-    cli::cli_alert_info("Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}")
-  } else if (is_dev_version) {
-    suffix <- tolower(trimws(pipelineVersion))
-    suffix <- gsub("[^a-z0-9]+", "_", suffix)
-    suffix <- gsub("^_+|_+$", "", suffix)
-    suffix <- gsub("_+", "_", suffix)
 
-    if (suffix == "") {
-      stop("pipelineVersion must contain at least one letter or number")
+    if (nchar(cohortTable) > MAX_TEST_COHORT_TABLE_NAME_LENGTH) {
+      cli::cli_abort(c(
+        "Derived cohort table name is too long.",
+        i = "{.val {cohortTable}} is {nchar(cohortTable)} characters; the maximum is {MAX_TEST_COHORT_TABLE_NAME_LENGTH}.",
+        i = "Shorten the pipeline version / cohort table suffix."
+      ))
     }
 
-    if (nchar(suffix) > 24) {
-      suffix <- substr(suffix, 1, 24)
-      cli::cli_alert_warning("pipelineVersion truncated to 24 characters: {.val {suffix}}")
-    }
-
-    cohortTable <- paste0(cohortTable, "_", suffix)
     cli::cli_alert_info(
       "Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}"
     )
+  } else if (!is.null(cohortTableSuffix)) {
+    stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
   }
 
   # Create and return ExecutionSettings

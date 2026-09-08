@@ -602,8 +602,8 @@ testStudyTask <- function(
   checkmate::assert_string(configBlock, min.chars = 1)
   checkmate::assert_string(pipelineVersion, min.chars = 1)
 
-  pipelineVersion <- normalizeTestPipelineVersionLabel(pipelineVersion)
-  
+  pipelineVersion <- normalizePipelineVersion(pipelineVersion)
+
   # Check branch
   branch <- get_current_branch()
   if (branch == "main") {
@@ -624,28 +624,6 @@ testStudyTask <- function(
     checkStatus = TRUE,
     env = env
   )
-}
-
-#' @keywords internal
-normalizeTestPipelineVersionLabel <- function(label, maxChars = 24) {
-  checkmate::assert_string(label, min.chars = 1)
-  checkmate::assert_int(maxChars, lower = 1)
-
-  normalized <- tolower(trimws(label))
-  normalized <- gsub("[^a-z0-9]+", "_", normalized)
-  normalized <- gsub("^_+|_+$", "", normalized)
-  normalized <- gsub("_+", "_", normalized)
-
-  if (normalized == "") {
-    stop("test label must contain at least one letter or number")
-  }
-
-  if (nchar(normalized) > maxChars) {
-    normalized <- substr(normalized, 1, maxChars)
-    cli::cli_alert_warning("Test label truncated to {maxChars} characters: {normalized}")
-  }
-
-  normalized
 }
 
 #' @title Core Pipeline Execution Logic
@@ -687,13 +665,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     if (is.null(pipelineVersionOverride)) {
       pipelineVersion <- "dev"
     } else {
-      pipelineVersion <- normalizeTestPipelineVersionLabel(pipelineVersionOverride)
+      pipelineVersion <- normalizePipelineVersion(pipelineVersionOverride)
     }
 
     if (is.null(cohortTableSuffix)) {
-      cohortTableSuffixResolved <- normalizeTestPipelineVersionLabel(pipelineVersion)
+      cohortTableSuffixResolved <- normalizePipelineVersion(pipelineVersion)
     } else {
-      cohortTableSuffixResolved <- normalizeTestPipelineVersionLabel(cohortTableSuffix)
+      cohortTableSuffixResolved <- normalizePipelineVersion(cohortTableSuffix)
     }
 
     currentVersion <- NULL
@@ -994,7 +972,8 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 #' @param configBlock Character or character vector. Name(s) of config block(s) to use.
 #' @param pipelineVersion Character. Test namespace used for output folders and
 #'   cohort table suffix. Defaults to \code{"dev"}. The value is normalized to
-#'   lowercase snake_case and truncated to 24 characters.
+#'   lowercase snake_case; an over-long namespace is rejected rather than
+#'   truncated.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns task results list
 #' @export
@@ -1009,8 +988,8 @@ testStudyPipeline <- function(configBlock, pipelineVersion = "dev", env = rlang:
   checkmate::assert_character(configBlock, min.len = 1, any.missing = FALSE)
   checkmate::assert_string(pipelineVersion, min.chars = 1)
 
-  pipelineVersion <- normalizeTestPipelineVersionLabel(pipelineVersion)
-  
+  pipelineVersion <- normalizePipelineVersion(pipelineVersion)
+
   # Check branch
   branch <- get_current_branch()
   if (branch == "main") {
