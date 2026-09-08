@@ -25,4 +25,7 @@ testthat::test_that("testStudyTask accepts the shared pipelineVersion namespace"
 testthat::test_that("pipeline execution functions accept an ExecutionContext", {
   testthat::expect_true("executionContext" %in% names(formals(execute_task)))
   testthat::expect_true("executionContext" %in% names(formals(generateCohorts)))
+  testthat::expect_true(
+    "executionContext" %in% names(formals(createExecutionSettingsFromConfig))
+  )
 })

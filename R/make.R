@@ -247,6 +247,10 @@ createExecutionSettings <- function(connectionDetails,
 #' @param cohortTableSuffix Character. Optional suffix for cohort table names in
 #'   non-semver (test) runs. Normalized to lowercase snake_case and truncated to
 #'   24 characters. If NULL, non-semver runs default to \code{"_dev"}.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied, its mode and normalized `pipelineVersion` control cohort
+#'   table routing. The legacy `pipelineVersion` and `cohortTableSuffix`
+#'   arguments remain available for direct callers.
 #'
 #' @details
 #' Credentials are loaded from secrets.yml (default \code{~/.picard/secrets.yml}).
@@ -272,7 +276,20 @@ createExecutionSettingsFromConfig <- function(
     cohortTable = NULL,
     databaseName = NULL,
     pipelineVersion = "prod",
-    cohortTableSuffix = NULL) {
+    cohortTableSuffix = NULL,
+    executionContext = NULL) {
+
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+    executionMode <- executionContext$getMode()
+  } else {
+    if (grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)) {
+      executionMode <- "production"
+    } else {
+      executionMode <- "test"
+    }
+  }
 
   if (!file.exists(configFilePath)) {
     stop("Config file not found: ", configFilePath)
@@ -336,9 +353,16 @@ createExecutionSettingsFromConfig <- function(
 
   # Route to dev cohort table for any non-semver pipeline version (e.g. "dev", "test").
   # Semantic versions ("1.0.0", "2.1.3") always use the production table from config.
-  is_dev_version <- !grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
+  is_dev_version <- identical(executionMode, "test")
 
-  if (!is.null(cohortTableSuffix)) {
+  if (!is.null(executionContext)) {
+    if (is_dev_version) {
+      cohortTable <- paste0(cohortTable, "_", pipelineVersion)
+      cli::cli_alert_info(
+        "Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}"
+      )
+    }
+  } else if (!is.null(cohortTableSuffix)) {
     if (!is_dev_version) {
       stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
     }

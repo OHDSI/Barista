@@ -319,15 +319,15 @@ generateCohorts <- function(executionSettings, pipelineVersion,
     databaseName <- executionSettings$databaseName
     dbNameSnake <- snakecase::to_snake_case(databaseName)
     
-    outputFolder <- if (is.null(executionContext)) {
-      fs::path(
+    if (is.null(executionContext)) {
+      outputFolder <- fs::path(
         here::here("exec/results"),
         dbNameSnake,
         pipelineVersion,
         "00_buildCohorts"
       )
     } else {
-      executionContext$getResultsPath(
+      outputFolder <- executionContext$getResultsPath(
         taskName = "00_buildCohorts",
         databaseName = databaseName
       )
@@ -464,7 +464,8 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
       executionSettings <- createExecutionSettingsFromConfig(
         configBlock = configBlock,
         pipelineVersion = pipelineVersion,
-        cohortTableSuffix = cohortTableSuffix
+        cohortTableSuffix = ifelse(is.null(executionContext), cohortTableSuffix, NULL),
+        executionContext = executionContext
       )
     }, error = function(e) {
       cli::cli_alert_warning("Could not create execution settings for task status check: {e$message}")
@@ -793,7 +794,8 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     executionSettings <- createExecutionSettingsFromConfig(
       configBlock = configBlock[1],
       pipelineVersion = pipelineVersion,
-      cohortTableSuffix = cohortTableSuffixResolved
+      cohortTableSuffix = ifelse(is.null(executionContext), cohortTableSuffix, NULL),
+      executionContext = executionContext
     )
     cli::cli_alert_success("Execution settings created for config: {configBlock[1]}")
   }, error = function(e) {
