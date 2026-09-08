@@ -246,7 +246,8 @@ createExecutionSettings <- function(connectionDetails,
 #' @param pipelineVersion Character. Pipeline version ("prod" for production table, "dev" or "0.0.1" etc.).
 #' @param cohortTableSuffix Character. Optional suffix for cohort table names in
 #'   non-semver (test) runs. Normalized to lowercase snake_case and truncated to
-#'   24 characters. If NULL, non-semver runs default to \code{"_dev"}.
+#'   24 characters. If NULL, the non-semver \code{pipelineVersion} is used as
+#'   the suffix.
 #' @param executionContext An optional `ExecutionContext` for the current run.
 #'   When supplied, its mode and normalized `pipelineVersion` control cohort
 #'   table routing. The legacy `pipelineVersion` and `cohortTableSuffix`
@@ -384,8 +385,24 @@ createExecutionSettingsFromConfig <- function(
     cohortTable <- paste0(cohortTable, "_", suffix)
     cli::cli_alert_info("Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}")
   } else if (is_dev_version) {
-    cohortTable <- paste0(cohortTable, "_dev")
-    cli::cli_alert_info("Dev pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}")
+    suffix <- tolower(trimws(pipelineVersion))
+    suffix <- gsub("[^a-z0-9]+", "_", suffix)
+    suffix <- gsub("^_+|_+$", "", suffix)
+    suffix <- gsub("_+", "_", suffix)
+
+    if (suffix == "") {
+      stop("pipelineVersion must contain at least one letter or number")
+    }
+
+    if (nchar(suffix) > 24) {
+      suffix <- substr(suffix, 1, 24)
+      cli::cli_alert_warning("pipelineVersion truncated to 24 characters: {.val {suffix}}")
+    }
+
+    cohortTable <- paste0(cohortTable, "_", suffix)
+    cli::cli_alert_info(
+      "Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}"
+    )
   }
 
   # Create and return ExecutionSettings
