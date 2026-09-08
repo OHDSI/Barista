@@ -105,6 +105,28 @@ testthat::test_that("ExecutionContext supports a run shared by multiple database
       tempdir(), "exec", "results", "database_one", "develop_ml", "01_task"
     )
   )
+
+  # A run-scoped context derives each database's cohort table on demand.
+  testthat::expect_equal(context$deriveCohortTable("db_one_cohort"), "db_one_cohort_develop_ml")
+  testthat::expect_equal(context$deriveCohortTable("db_two_cohort"), "db_two_cohort_develop_ml")
+})
+
+testthat::test_that("ExecutionContext$deriveCohortTable applies the mode rule and length ceiling", {
+  test_ctx <- ExecutionContext$new(mode = "test", pipelineVersion = "develop_ml")
+  testthat::expect_equal(test_ctx$deriveCohortTable("cohort"), "cohort_develop_ml")
+
+  prod_ctx <- ExecutionContext$new(
+    mode = "production", pipelineVersion = "1.2.3", studyVersion = "1.2.3"
+  )
+  testthat::expect_equal(prod_ctx$deriveCohortTable("cohort"), "cohort")
+
+  # Production tables are never re-validated for length.
+  long_base <- paste(rep("x", MAX_TEST_COHORT_TABLE_NAME_LENGTH), collapse = "")
+  testthat::expect_equal(prod_ctx$deriveCohortTable(long_base), long_base)
+  testthat::expect_error(
+    test_ctx$deriveCohortTable(long_base),
+    "Derived cohort table name is too long"
+  )
 })
 
 testthat::test_that("ExecutionContext defaults test pipelineVersion to dev", {

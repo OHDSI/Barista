@@ -354,33 +354,20 @@ createExecutionSettingsFromConfig <- function(
   }
 
   # Test (non-semver) pipeline versions get a suffixed cohort table so a test run
-  # never touches the production table. Semantic versions ("1.0.0", "2.1.3") use
-  # the production table from config unchanged. Suffix normalization is shared
-  # with the results-folder and task-history namespace via normalizePipelineVersion().
+  # never touches the production table; semantic versions use the production table
+  # from config unchanged. The mode + namespace rule (and the table-name length
+  # ceiling) live in ExecutionContext$deriveCohortTable() — this is the only
+  # caller-side hook.
   is_dev_version <- identical(executionMode, "test")
 
   if (is_dev_version) {
-    if (!is.null(executionContext)) {
-      # The context already owns normalization; its pipelineVersion is the suffix.
-      suffix <- pipelineVersion
-    } else if (!is.null(cohortTableSuffix)) {
-      suffix <- normalizePipelineVersion(cohortTableSuffix)
-    } else {
-      suffix <- normalizePipelineVersion(pipelineVersion)
-    }
-
-    cohortTable <- paste0(cohortTable, "_", suffix)
-
-    if (nchar(cohortTable) > MAX_TEST_COHORT_TABLE_NAME_LENGTH) {
-      cli::cli_abort(c(
-        "Derived cohort table name is too long.",
-        i = "{.val {cohortTable}} is {nchar(cohortTable)} characters; the maximum is {MAX_TEST_COHORT_TABLE_NAME_LENGTH}.",
-        i = "Shorten the pipeline version / cohort table suffix."
-      ))
-    }
-
+    ctx <- executionContext %||% ExecutionContext$new(
+      mode = "test",
+      pipelineVersion = cohortTableSuffix %||% pipelineVersion
+    )
+    cohortTable <- ctx$deriveCohortTable(cohortTable)
     cli::cli_alert_info(
-      "Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}"
+      "Test pipeline version ({ctx$getPipelineVersion()}) — cohort table set to: {.val {cohortTable}}"
     )
   } else if (!is.null(cohortTableSuffix)) {
     stop("cohortTableSuffix can only be used with non-semver test pipeline versions")

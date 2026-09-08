@@ -7,7 +7,13 @@
 Describes one Picard pipeline execution and derives the names used to
 isolate its database and filesystem outputs. This R6 class owns execution
 mode and pipeline version (the namespace).
+
+Internal: constructed by the pipeline (\code{execute_pipeline()}) and by the
+settings/path helpers (\code{\link[=createExecutionSettingsFromConfig]{createExecutionSettingsFromConfig()}},
+\code{\link[=setOutputFolder]{setOutputFolder()}}, \code{\link[=resolveResultsPath]{resolveResultsPath()}}). Study code and task files
+never construct it directly.
 }
+\keyword{internal}
 \section{Methods}{
 \subsection{Public methods}{
   \itemize{
@@ -16,6 +22,7 @@ mode and pipeline version (the namespace).
     \item \href{#method-ExecutionContext-getPipelineVersion}{\code{ExecutionContext$getPipelineVersion()}}
     \item \href{#method-ExecutionContext-getStudyVersion}{\code{ExecutionContext$getStudyVersion()}}
     \item \href{#method-ExecutionContext-getCohortTable}{\code{ExecutionContext$getCohortTable()}}
+    \item \href{#method-ExecutionContext-deriveCohortTable}{\code{ExecutionContext$deriveCohortTable()}}
     \item \href{#method-ExecutionContext-getResultsPath}{\code{ExecutionContext$getResultsPath()}}
     \item \href{#method-ExecutionContext-clone}{\code{ExecutionContext$clone()}}
   }
@@ -116,7 +123,32 @@ test-derived names. Set to \code{NULL} to disable this package-level check.}
   }
   \subsection{Returns}{
     Character or \code{NULL}. Effective cohort table name for this
-execution, or \code{NULL} for a run-scoped context without a database.
+execution, or \code{NULL} for a run-scoped context without a base table.
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ExecutionContext-deriveCohortTable"></a>}}
+\if{latex}{\out{\hypertarget{method-ExecutionContext-deriveCohortTable}{}}}
+\subsection{\code{ExecutionContext$deriveCohortTable()}}{
+  Apply this run's mode and namespace to a configured base
+cohort table. Production returns the base table unchanged; test appends
+the normalized pipeline version and enforces the table-name length
+ceiling before any database work.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ExecutionContext$deriveCohortTable(baseCohortTable)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{baseCohortTable}}{Character. The configured, unsuffixed cohort table.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    Character. The effective cohort table name for this execution.
   }
 }
 

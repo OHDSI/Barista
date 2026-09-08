@@ -309,6 +309,12 @@ normalizePipelineVersion <- function(pipelineVersion) {
 #' isolate its database and filesystem outputs. This R6 class owns execution
 #' mode and pipeline version (the namespace).
 #'
+#' Internal: constructed by the pipeline (`execute_pipeline()`) and by the
+#' settings/path helpers ([createExecutionSettingsFromConfig()],
+#' [setOutputFolder()], [resolveResultsPath()]). Study code and task files
+#' never construct it directly.
+#'
+#' @keywords internal
 ExecutionContext <- R6::R6Class(
   classname = "ExecutionContext",
   public = list(
@@ -353,36 +359,25 @@ ExecutionContext <- R6::R6Class(
           cli::cli_abort("Production pipelineVersion must match studyVersion.")
         }
         normalized_pipeline_version <- pipelineVersion
-        cohort_table <- baseCohortTable
       } else {
         normalized_pipeline_version <- normalizePipelineVersion(pipelineVersion)
-        cohort_table <- if (is.null(baseCohortTable)) {
-          NULL
-        } else {
-          paste0(baseCohortTable, "_", normalized_pipeline_version)
-        }
-      }
-
-      if (!is.null(maxTableNameLength) &&
-          mode == "test" &&
-          !is.null(cohort_table) &&
-          nchar(cohort_table) > maxTableNameLength) {
-        cli::cli_abort(c(
-          "Derived cohort table name is too long.",
-          i = "Base table {.val {baseCohortTable}} has {nchar(baseCohortTable)} characters.",
-          i = "Pipeline Version {.val {normalized_pipeline_version}} produces {.val {cohort_table}} ({nchar(cohort_table)} characters).",
-          i = "The maximum permitted length is {maxTableNameLength} characters."
-        ))
       }
 
       private$.mode <- mode
       private$.pipelineVersion <- normalized_pipeline_version
       private$.studyVersion <- studyVersion
       private$.baseCohortTable <- baseCohortTable
-      private$.cohortTable <- cohort_table
       private$.databaseName <- databaseName
       private$.execPath <- fs::path_abs(execPath)
       private$.maxTableNameLength <- maxTableNameLength
+
+      # Derived here so a single-database context still exposes getCohortTable();
+      # deriveCohortTable() is the one place the mode + namespace rule lives.
+      if (is.null(baseCohortTable)) {
+        private$.cohortTable <- NULL
+      } else {
+        private$.cohortTable <- self$deriveCohortTable(baseCohortTable)
+      }
     },
 
     #' @return Character. Execution mode, either `"test"` or `"production"`.
@@ -401,9 +396,27 @@ ExecutionContext <- R6::R6Class(
     },
 
     #' @return Character or `NULL`. Effective cohort table name for this
-    #'   execution, or `NULL` for a run-scoped context without a database.
+    #'   execution, or `NULL` for a run-scoped context without a base table.
     getCohortTable = function() {
       private$.cohortTable
+    },
+
+    #' @description Apply this run's mode and namespace to a configured base
+    #'   cohort table. Production returns the base table unchanged; test appends
+    #'   the normalized pipeline version and enforces the table-name length
+    #'   ceiling before any database work.
+    #' @param baseCohortTable Character. The configured, unsuffixed cohort table.
+    #' @return Character. The effective cohort table name for this execution.
+    deriveCohortTable = function(baseCohortTable) {
+      checkmate::assert_string(baseCohortTable, min.chars = 1)
+
+      if (identical(private$.mode, "production")) {
+        return(baseCohortTable)
+      }
+
+      cohort_table <- paste0(baseCohortTable, "_", private$.pipelineVersion)
+      private$assert_table_name_length(baseCohortTable, cohort_table)
+      cohort_table
     },
 
     #' @param taskName Character. Task folder or file name.
@@ -433,7 +446,20 @@ ExecutionContext <- R6::R6Class(
     .cohortTable = NULL,
     .databaseName = NULL,
     .execPath = NULL,
-    .maxTableNameLength = NULL
+    .maxTableNameLength = NULL,
+
+    assert_table_name_length = function(base_cohort_table, cohort_table) {
+      if (is.null(private$.maxTableNameLength) ||
+          nchar(cohort_table) <= private$.maxTableNameLength) {
+        return(invisible(NULL))
+      }
+      cli::cli_abort(c(
+        "Derived cohort table name is too long.",
+        i = "Base table {.val {base_cohort_table}} has {nchar(base_cohort_table)} characters.",
+        i = "Pipeline version {.val {private$.pipelineVersion}} produces {.val {cohort_table}} ({nchar(cohort_table)} characters).",
+        i = "The maximum permitted length is {private$.maxTableNameLength} characters."
+      ))
+    }
   )
 )
 
