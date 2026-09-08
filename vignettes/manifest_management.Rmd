@@ -259,10 +259,10 @@ resetCohortManifest(manifest = manifest, scope = "derived")
 
 # 2. Re-run your build script with corrected parameters
 manifest$buildUnionCohort(
-  label     = "T2DM or HF - Any",
-  cohortIds = c(1L, 2L),
-  category  = "Composite Populations",
-  gapDays   = 7L   # corrected value
+  label         = "T2DM or HF - Any",
+  cohortEntries = manifest$queryCohortsByLabel(c("T2DM", "Heart Failure")),
+  category      = "Composite Populations",
+  gapDays       = 7L   # corrected value
 )
 # ... other build calls ...
 
@@ -463,11 +463,12 @@ csm$extractSourceCodes(
 ```
 
 `extractSourceCodes()` requires `executionSettings` to be attached to the
-manifest (it queries the vocabulary tables in your CDM):
+manifest (it queries the vocabulary tables in your CDM). It processes every
+concept set in the manifest; narrow the output by `sourceVocabs`:
 
 ```{r}
 csm$setExecutionSettings(execSettings)
-csm$extractSourceCodes(conceptSetIds = c(1L, 2L), sourceVocabs = "ICD10CM")
+csm$extractSourceCodes(sourceVocabs = c("ICD10CM", "ICD9CM"))
 ```
 
 ---
@@ -673,13 +674,14 @@ Sorted by count (descending). Useful for auditing tag usage patterns.
 # 1. Load and inspect
 manifest <- loadCohortManifest()
 
-# 2. Tag new cohorts during import
+# 2. Import new cohorts (atlasConnection set via $setAtlasConnection() or passed here)
 manifest$importAtlasCohorts(
-  cohortsLoad = read.csv("cohorts_to_import.csv")
+  cohortsLoad = read.csv("cohorts_to_import.csv"),
+  atlasConnection = atlasConnection
 )
 
-# 3. Add QA tags after review
-approved_cohorts <- manifest$queryCohortsByTag("route: atlas")
+# 3. Add QA tags after review (every ATLAS-imported cohort carries an `atlasId` tag)
+approved_cohorts <- manifest$queryCohortsByTagName("atlasId")
 for (row in 1:nrow(approved_cohorts)) {
   cid <- approved_cohorts$id[row]
   manifest$mergeTagsIntoCohort(

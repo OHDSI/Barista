@@ -157,14 +157,16 @@ sm <- makeStudyMeta(
 
 ## Step 2: Configure Database Connection
 
-If analyzing a database, create a database configuration block using `setDbConfigBlock()`:
+If analyzing a database, create a database configuration block using `makeBlock()`:
 
 ```{r eval = FALSE}
-db <- setDbConfigBlock(
+db <- makeBlock(
   configBlockName = "my_cdm",
+  dbServer = "my_cdm",
   cdmDatabaseSchema = "omop_cdm_schema",
-  databaseName = "my_database_v1",
+  workDatabaseSchema = "work_schema",
   cohortTable = "study_cohorts",
+  databaseName = "my_database_v1",
   databaseLabel = "Primary CDM"
 )
 ```
@@ -172,26 +174,35 @@ db <- setDbConfigBlock(
 **Parameters:**
 - `configBlockName`: Identifier for this database configuration
 - `cdmDatabaseSchema`: Schema containing the OMOP CDM tables
-- `databaseName`: Name of the database (for internal tracking)
+- `workDatabaseSchema`: Schema where you have write access (cohort tables, work tables)
 - `cohortTable`: Name of the table where cohorts will be created
+- `dbServer`: Key used to look up credentials in `~/.picard/secrets.yml` (defaults to `configBlockName`)
+- `databaseName`: Name of the database (for internal tracking)
 - `databaseLabel`: Human-readable label for reports and documentation
+- `tempEmulationSchema`: Optional; schema for temp tables on Snowflake/Oracle
+
+Note that the block carries **no credentials** — those live in `~/.picard/secrets.yml`, keyed by `dbServer` (see [Setting Up Database Credentials](#setting-up-database-credentials) below).
 
 **For multiple databases**, create multiple blocks:
 
 ```{r eval = FALSE}
-db1 <- setDbConfigBlock(
+db1 <- makeBlock(
   configBlockName = "my_cdm",
+  dbServer = "my_cdm",
   cdmDatabaseSchema = "omop_cdm_schema",
-  databaseName = "my_database_v1",
+  workDatabaseSchema = "work_schema",
   cohortTable = "study_cohorts",
+  databaseName = "my_database_v1",
   databaseLabel = "Primary CDM"
 )
 
-db2 <- setDbConfigBlock(
+db2 <- makeBlock(
   configBlockName = "secondary_cdm",
+  dbServer = "secondary_cdm",
   cdmDatabaseSchema = "secondary_omop_schema",
-  databaseName = "secondary_database_v1",
+  workDatabaseSchema = "work_schema_sec",
   cohortTable = "study_cohorts_sec",
+  databaseName = "secondary_database_v1",
   databaseLabel = "Secondary CDM"
 )
 ```
@@ -442,9 +453,11 @@ sm <- makeStudyMeta(
 # 2. Configure database connection
 db <- makeBlock(
   configBlockName = "my_cdm",
+  dbServer = "my_cdm",
   cdmDatabaseSchema = "omop_cdm_schema",
-  databaseName = "my_database_v1",
+  workDatabaseSchema = "work_schema",
   cohortTable = "study_cohorts",
+  databaseName = "my_database_v1",
   databaseLabel = "Primary CDM"
 )
 

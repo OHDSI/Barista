@@ -11,7 +11,7 @@ Picard is built on the Ulysses framework, which follows the philosophy that real
 - **Automation:** Consistent organization enables reliable workflows and tooling
 - **Version control:** Clear separation of concerns makes git history more meaningful
 
-Picard uses the Ulysses repository structure, adding specialized directories and configuration for cohort-based studies, Evidence Generation Plans, and results dissemination. This vignette describes the standard Ulysses repository structure created when you initialize a project using `launchUlyssesRepo()`.
+Picard uses the Ulysses repository structure, adding specialized directories and configuration for cohort-based studies, Evidence Generation Plans, and results dissemination. This vignette describes the standard Ulysses repository structure created when you initialize a project by bundling study settings with `makeUlyssesStudySettings()` and calling `$initUlyssesRepo()` on the result (see [Launching a Picard Study](launching_a_study.html)).
 
 ## Pipeline Workflow and Folder Organization
 
@@ -42,7 +42,7 @@ The Ulysses repository organizes folders to match the flow of a real-world evide
 ```
 
 **Workflow sequence:**
-1. Initialize with metadata (config.yml defines databases and credentials)
+1. Initialize with metadata (config.yml defines databases and schemas; credentials live in `~/.picard/secrets.yml`)
 2. Load or create inputs (cohorts and concept sets)
 3. Execute analysis tasks (code in analysis/tasks runs using inputs)
 4. Raw results written to exec/results organized by database and version
@@ -143,7 +143,7 @@ Add a short description about the study!
 - [Study Repository](https://github.com/org/repo)
 ```
 
-The README is auto-generated when you launch a study using `launchUlyssesRepo()`. You should edit the Study Description section to explain your research question and study design. Update the badges and version as your study progresses.
+The README is auto-generated when you initialize a study with `$initUlyssesRepo()`. You should edit the Study Description section to explain your research question and study design. Update the badges and version as your study progresses.
 
 #### NEWS.md
 
@@ -167,63 +167,39 @@ Format follows semantic versioning conventions:
 
 #### config.yml
 
-Central configuration file specifying parameters needed to establish database connections. Uses YAML format with two section types:
+Central configuration file describing the study and its databases. It holds **no credentials** — only non-sensitive settings. Uses YAML format with two section types:
 
-- **default:** Universal study settings (project name, version)
-- **block headers:** Database-specific configurations (dbms, credentials, schemas)
+- **default:** Universal study settings (`projectName`, `version`, and optionally `ignoreUncommittedPaths`)
+- **block headers:** One block per database, holding schema names, table names, and a `dbServer` pointer into `secrets.yml`
 
-When you source a block header in a task file, the pipeline runs using only that block's configuration, enabling multi-database studies.
+`createExecutionSettingsFromConfig(configBlock = "...")` reads a block to run the pipeline against that database, enabling multi-database studies.
 
-**Important:** Connection details vary by database system. The codebase distinguishes between:
+**Where credentials live:** DBMS type, server/port (or Snowflake `connectionString`), username, and password are **not** in `config.yml`. They live in a user-level `~/.picard/secrets.yml`, keyed by the block's `dbServer` field. This keeps `config.yml` safe to commit. Set `secrets.yml` up with `setupDbSecretsKeyring()` / `editSecrets()` — see [Launching a Picard Study](launching_a_study.html#setting-up-database-credentials).
 
-- **Snowflake:** Uses `connectionString` format (JDBC connection string)
-- **PostgreSQL, SQL Server, MySQL, Oracle, Redshift:** Use `server` and `port` fields
+**Fields in a config.yml database block:**
 
-**Protecting Credentials with !expr:**
-
-The `!expr` tag (from the config package) allows you to evaluate R code within the config file. This is critical for security: it enables pulling credentials from environment variables rather than storing them as plain text in config.yml.
-
-```yaml
-user: !expr Sys.getenv('dbUser')        # Evaluates R code: retrieves DB_USER from environment
-password: !expr Sys.getenv('dbPassword') # Evaluates R code: retrieves DB_PASSWORD from environment
-```
-
-You can use any R function wrapped in `!expr` to retrieve credentials, including:
-
-- **Environment variables:** `!expr Sys.getenv('VAR_NAME')`
-- **Keyring package:** `!expr keyring::key_get(service = 'picard', username = 'atlasUser')`
-- **Custom functions:** `!expr my_secure_fetch_credential('db_password')`
-
-**Best practice:** Always use `!expr` with a secure credential storage system. Never store passwords or connection strings as plain text in config.yml or commit them to git.
-
-**Common credentials:**
-
-- `dbms`: Database type (snowflake, sql server, postgresql, mysql, oracle, redshift)
-- `user`: Database username (from environment variable via `!expr Sys.getenv()`)
-- `password`: Database password (from environment variable)
+- `dbServer`: Key used to look up credentials in `secrets.yml` (defaults to the block name)
 - `databaseName`: Internal reference name (snake_case with database + snapshot date)
 - `databaseLabel`: Pretty name for output formatting
 - `cdmDatabaseSchema`: Schema containing OMOP CDM tables (format: `schema` or `database.schema`)
-- `vocabDatabaseSchema`: Schema containing vocabulary tables (usually same as cdmDatabaseSchema)
-- `workDatabaseSchema`: Schema where user has write access (for cohort tables and intermediary work)
-- `tempEmulationSchema`: Optional schema for temp tables (snowflake, oracle)
-- `cohortTable`: Name of cohort table to create (default: `{repoName}_{databaseName}`)
+- `vocabDatabaseSchema`: Schema containing vocabulary tables (usually same as `cdmDatabaseSchema`)
+- `workDatabaseSchema`: Schema where the user has write access (for cohort tables and intermediary work)
+- `tempEmulationSchema`: Schema for temp tables on platforms that need it (Snowflake, Oracle)
+- `cohortTable`: Name of the cohort table to create
 
-Example config.yml with Snowflake and PostgreSQL:
+Blocks are normally added with `makeBlock()` + `addBlock()` rather than hand-edited.
+
+Example `config.yml` with two databases:
 
 ```yaml
-# Config File for my_study
+# Exec Config File for Ulysses Repo: my_study
 
 default:
   projectName: my_study
   version: 1.0.0
 
-# Snowflake: Uses connectionString format
 snowflake_prod:
-  dbms: snowflake
-  connectionString: !expr Sys.getenv('dbConnectionString')
-  user: !expr Sys.getenv('dbUser')
-  password: !expr Sys.getenv('dbPassword')
+  dbServer: snowflake_prod
   databaseName: snowflake_prod_20260101
   databaseLabel: Snowflake Production
   cdmDatabaseSchema: omop_schema
@@ -232,13 +208,8 @@ snowflake_prod:
   tempEmulationSchema: temp_schema
   cohortTable: my_study_cohorts
 
-# PostgreSQL: Uses server/port format
 postgres_local:
-  dbms: postgresql
-  server: localhost
-  port: 5432
-  user: !expr Sys.getenv('pgUser')
-  password: !expr Sys.getenv('pgPassword')
+  dbServer: postgres_local
   databaseName: postgres_local_20260101
   databaseLabel: PostgreSQL Local
   cdmDatabaseSchema: public
@@ -247,19 +218,22 @@ postgres_local:
   cohortTable: my_study_pg_cohorts
 ```
 
-**Setting up environment variables:**
+The matching `~/.picard/secrets.yml` supplies the credentials, one top-level key per `dbServer`. Values can be plain strings or `!expr` R expressions (e.g. `keyring::key_get(...)`, `Sys.getenv(...)`):
 
-In your `.Renviron` file (in project or home directory):
+```yaml
+snowflake_prod:
+  dbms: snowflake
+  connectionString: !expr keyring::key_get("picard", "snowflake_prod_connstr")
+  user: !expr keyring::key_get("picard", "snowflake_prod_user")
+  password: !expr keyring::key_get("picard", "snowflake_prod_password")
 
+postgres_local:
+  dbms: postgresql
+  server: localhost
+  port: 5432
+  user: !expr Sys.getenv("PG_USER")
+  password: !expr Sys.getenv("PG_PASSWORD")
 ```
-dbUser=your_db_username
-dbPassword=your_db_password
-dbConnectionString=jdbc:snowflake://account.snowflakecomputing.com:443
-pgUser=postgres_user
-pgPassword=postgres_password
-```
-
-Load before running pipeline: `readRenviron("~/.Renviron")`
 
 #### main.R
 
@@ -396,26 +370,25 @@ inputs/cohorts/
 ├── sql/
 │   ├── 004_primarySubset.sql          # Subset of cohort 001
 │   └── 005_combinedPopulation.sql     # Union of cohorts 001 & 002
-├── cohortsLoad.csv                    # Metadata index for cohort enrichment
+├── cohortsLoad.csv                    # ATLAS cohorts to bulk-import
 └── cohortManifest.sqlite              # Provenance & metadata tracking database
 ```
 
 **cohortsLoad.csv:**
 
-A CSV file with metadata for each cohort. When `loadCohortManifest()` is called, this file is used to enrich CohortDef objects by matching `file_name` with actual cohort files. Used to track where cohorts came from and organize them with tags.
+A CSV file listing the ATLAS cohorts to bulk-import. `createBlankCohortsLoadFile()` scaffolds it; `importAtlasCohorts()` reads it, downloads each cohort's JSON to `json/`, and registers it in the manifest with the `label`/`category`/`subCategory` carried onto the cohort as tags.
 
 Columns:
-- `atlasId`: ATLAS cohort ID (integer, e.g., `1`, `42`)
+- `atlasId`: ATLAS cohort definition ID (integer, e.g., `1`, `42`)
 - `label`: Display name (character, e.g., `"Type 2 Diabetes patients"`)
 - `category`: Broad grouping (character, e.g., `"Disease Populations"`)
 - `subCategory`: Sub-grouping (character, optional, e.g., `"Endocrine"`)
-- `file_name`: Relative path to JSON file (character, e.g., `"json/t2dm_patients.json"`)
 
 Example:
 ```
-atlasId,label,category,subCategory,file_name
-1,Type 2 Diabetes,Disease Populations,Endocrine,json/t2dm_patients.json
-2,Diabetes Complications,Disease Populations,Endocrine,json/diabetes_complications.json
+atlasId,label,category,subCategory
+1,Type 2 Diabetes,Disease Populations,Endocrine
+2,Diabetes Complications,Disease Populations,Endocrine
 ```
 
 When loaded, these metadata fields are converted to tags on each cohort for later querying (e.g., `$queryCohortsByTag()`, `$queryCohortsByLabel()`).
@@ -427,23 +400,28 @@ SQLite database created/managed by `CohortManifest` class. Contains `cohort_mani
 | Column | Type | Purpose |
 |--------|------|---------|
 | `id` | INTEGER PRIMARY KEY | Sequential cohort ID assigned by Picard |
-| `label` | TEXT NOT NULL | Cohort display name |
-| `tags` | TEXT | Serialized tags (e.g., `"atlasId: 1 \| category: Disease Populations \| subCategory: Endocrine"`) |
-| `filePath` | TEXT NOT NULL | Full path to cohort definition file |
-| `hash` | TEXT NOT NULL | MD5 hash of SQL for change detection |
-| `cohortType` | TEXT DEFAULT 'circe' | Type: `'circe'` (ATLAS JSON), `'sql'` (custom), `'subset'`, `'union'`, `'complement'` (dependency-based) |
-| `timestamp` | DATETIME DEFAULT CURRENT_TIMESTAMP | When cohort was added to manifest |
-| `status` | TEXT DEFAULT 'active' | Status tracking: `'active'`, `'missing'`, `'archived'` |
+| `label` | TEXT NOT NULL | Cohort display name (unique among active records) |
+| `category` | TEXT NOT NULL | User classification (e.g., "Disease Populations") |
+| `tags` | TEXT | Serialized tags (e.g., `"atlasId: 1 \| subCategory: Endocrine"`) |
+| `file_path` | TEXT NOT NULL | Path to the SQL/JSON file, stored **relative to the study repo root** |
+| `hash` | TEXT NOT NULL | Hash of the file **contents** for change detection |
+| `source_type` | TEXT NOT NULL | `'circe'`, `'sql'`, or `'derived'` |
+| `cohort_type` | TEXT NOT NULL | `circe`, `custom`, `custom_derived`, `union`, `subset`, `complement`, `composite`, `oprior`, `tprior`, `censor` |
+| `depends_on` | TEXT | JSON array of parent cohort IDs (derived cohorts only) |
+| `dependency_rule` | TEXT | JSON object of build parameters (derived cohorts only) |
+| `status` | TEXT DEFAULT 'active' | `'active'`, `'stale'`, `'deleted'`, or `'purged'` |
+| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | When cohort was added to manifest |
+| `updated_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | Last metadata/definition change |
 | `deleted_at` | DATETIME | Soft-delete timestamp if cohort removed |
 
 **Workflow:**
 
-1. Create `cohortsLoad.csv` with metadata for your cohorts (use `createBlankCohortsLoadFile()`)
-2. Import ATLAS cohort JSON definitions to `json/` folder (use `importAtlasCohorts()`)
-3. Add custom SQL or dependency-based cohorts to `sql/` (e.g., subsets, unions)
-4. Call `loadCohortManifest()` to scan directories and enrich with `cohortsLoad.csv` metadata
-5. First load creates `cohortManifest.sqlite` database; subsequent loads verify file hashes
-6. Use CohortManifest methods to query cohorts: `$queryCohortById(1)`, `$queryCohortsByTag("category: Disease Populations")`
+1. Initialize the manifest with `initCohortManifest()` (creates `cohortManifest.sqlite`)
+2. Register cohorts: bulk-import from ATLAS with `cohortsLoad.csv` + `$importAtlasCohorts()`, or add individually with `$addCirceCohort()`, `$addCaprCohort()`, `$addSqlCohort()`
+3. Add derived cohorts with the `$build*()` / `$addDependentCustomCohort()` methods
+4. Call `loadCohortManifest()` each session to rebuild the in-memory objects from SQLite
+5. Loads auto-sync against disk: file hashes are re-checked and drift is flagged
+6. Use CohortManifest methods to query cohorts: `$getCohortById(1)`, `$queryCohortsByTag("category: Disease Populations")`
 
 **See also:** [Loading Inputs](loading_inputs.html) for detailed guidance on creating, importing, and managing cohort manifests.
 
@@ -457,35 +435,26 @@ inputs/conceptSets/
 │   ├── exposure_antidiabetic.json        # Drug exposure concept set
 │   ├── outcome_mi.json                   # Condition outcome concept set
 │   └── covariate_hypertension.json       # Covariate measurement concept set
-├── conceptSetsLoad.csv                   # Metadata index for concept set enrichment
+├── conceptSetsLoad.csv                   # ATLAS concept sets to bulk-import
 └── conceptSetManifest.sqlite             # Provenance & metadata tracking database
 ```
 
 **conceptSetsLoad.csv:**
 
-Similar to cohortsLoad.csv, this CSV provides metadata for enriching `ConceptSetDef` objects. Columns:
+Similar to cohortsLoad.csv, this CSV lists the ATLAS concept sets to bulk-import via `$importAtlasConceptSets()`. `createBlankConceptSetsLoadFile()` scaffolds it. Columns:
 - `atlasId`: ATLAS concept set ID (integer, e.g., `456`, `789`)
 - `label`: Display name (character, e.g., `"Antidiabetic medications"`)
 - `category`: Broad grouping (character, e.g., `"Medications"` or `"Diagnoses"`)
 - `subCategory`: Optional sub-grouping (character, e.g., `"Endocrine Drugs"`)
-- `domain`: OMOP clinical domain (required, character):
-  - `drug_exposure` - Medication/drug concept sets
-  - `condition_occurrence` - Diagnosis concept sets
-  - `measurement` - Lab/test result concept sets
-  - `procedure` - Medical procedure concept sets
-  - `observation` - Observation concept sets
-  - `device_exposure` - Device/equipment concept sets
-  - `visit_occurrence` - Visit type concept sets
-  - `init` - Not yet classified (placeholder)
-- `sourceCode`: Rarely used; TRUE if concept set represents source codes instead of standard concepts (character: `TRUE` or `FALSE`)
-- `file_name`: Relative path to JSON file (character, e.g., `"json/hypertension.json"`)
+- `domain`: OMOP clinical domain (character): `drug_exposure`, `condition_occurrence`, `measurement`, `procedure`, `observation`, `device_exposure`, `visit_occurrence`, or `init` (not yet classified)
+- `sourceCode`: Rarely used; `TRUE` if the concept set represents source codes instead of standard concepts
 
 Example:
 ```
-atlasId,label,category,subCategory,domain,sourceCode,file_name
-456,Antidiabetic Medications,Medications,Endocrine,drug_exposure,FALSE,json/exposure_antidiabetic.json
-789,Acute MI,Diagnoses,Cardiovascular,condition_occurrence,FALSE,json/outcome_mi.json
-1001,Hypertension,Diagnoses,Cardiovascular,condition_occurrence,FALSE,json/covariate_hypertension.json
+atlasId,label,category,subCategory,sourceCode,domain
+456,Antidiabetic Medications,Medications,Endocrine,FALSE,drug_exposure
+789,Acute MI,Diagnoses,Cardiovascular,FALSE,condition_occurrence
+1001,Hypertension,Diagnoses,Cardiovascular,FALSE,condition_occurrence
 ```
 
 When loaded, metadata fields are converted to tags on each concept set for querying (e.g., `$getConceptSetsByTag()`, `$getConceptSetsByLabel()`).
@@ -498,21 +467,22 @@ SQLite database created/managed by `ConceptSetManifest` class. Contains `concept
 |--------|------|---------|
 | `id` | INTEGER PRIMARY KEY | Sequential concept set ID assigned by Picard |
 | `label` | TEXT NOT NULL | Concept set display name |
-| `tags` | TEXT | Serialized tags (e.g., `"atlasId: 456 \| domain: drug_exposure \| category: Medications"`) |
-| `filePath` | TEXT NOT NULL | Full path to concept set JSON file |
-| `hash` | TEXT NOT NULL | MD5 hash of JSON for change detection |
-| `timestamp` | DATETIME DEFAULT CURRENT_TIMESTAMP | When concept set added to manifest |
-| `status` | TEXT DEFAULT 'active' | Status: `'active'`, `'missing'`, `'archived'` |
+| `category` | TEXT NOT NULL | User classification (e.g., "Medications") |
+| `tags` | TEXT | Serialized tags (e.g., `"atlasId: 456 \| domain: drug_exposure"`) |
+| `file_path` | TEXT NOT NULL | Path to the JSON file, stored **relative to the study repo root** |
+| `hash` | TEXT NOT NULL | Hash of the file **contents** for change detection |
+| `status` | TEXT DEFAULT 'active' | `'active'`, `'stale'`, `'deleted'`, or `'purged'` |
+| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | When concept set added to manifest |
+| `updated_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | Last metadata/definition change |
 | `deleted_at` | DATETIME | Soft-delete timestamp if removed |
 
 **Workflow:**
 
-1. Create or update `conceptSetsLoad.csv` with metadata (use `createBlankConceptSetsLoadFile()`)
-2. Import ATLAS concept set JSON definitions to `json/` folder (use `importAtlasConceptSets()`)
-3. Call `loadConceptSetManifest()` to scan directories and enrich with `conceptSetsLoad.csv` metadata
-4. First load creates `conceptSetManifest.sqlite` database; subsequent loads verify file hashes
-5. Use ConceptSetManifest methods to query: `$getConceptSetById(456)`, `$getConceptSetsByTag("domain: drug_exposure")`
-6. Extract source codes and dependencies using `$extractSourceCodes()` (requires ExecutionSettings)
+1. Initialize the manifest with `initConceptSetManifest()` (creates `conceptSetManifest.sqlite`)
+2. Register concept sets: bulk-import from ATLAS with `conceptSetsLoad.csv` + `$importAtlasConceptSets()`, or add individually with `$addConceptSetFile()`, `$addCaprConceptSet()`, or `$combineConceptSets()`
+3. Call `loadConceptSetManifest()` each session to rebuild the in-memory objects from SQLite (auto-syncs against disk)
+4. Use ConceptSetManifest methods to query: `$getConceptSetById(456)`, `$getConceptSetsByTag("domain: drug_exposure")`
+5. Extract member/source codes using `$extractIncludedCodes()` / `$extractSourceCodes()` (requires ExecutionSettings)
 
 **See also:** [Loading Inputs](loading_inputs.html) for detailed guidance on creating, importing, and managing concept set manifests.
 
