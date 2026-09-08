@@ -354,7 +354,7 @@ same stream:
   line.
 - `exec/logs/task_run_history.csv` remains the canonical structured,
   queryable record of every task run (one row per task, with `status`,
-  `errorMessage`, `commitSha`, `codeState`); the log file's error detail block
+  `error_message`, `commit_sha`, `code_state`); the log file's error detail block
   is a durable, human-readable companion to that row, not a replacement for
   it.
 

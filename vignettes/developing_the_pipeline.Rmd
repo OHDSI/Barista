@@ -97,20 +97,23 @@ cohortManifest <- initCohortManifest()
 # make a load file and input atlas cohorts
 createBlankCohortsLoadFile()
 
-# ATLAS credentials must be configured in your .Renviron file before connecting.
-# Typical env vars: ATLAS_BASE_URL, ATLAS_API_TOKEN, ATLAS_SOURCE_ID, etc.
-# See ?getAtlasConnection for details on required environment variables
+# ATLAS credentials are read from ~/.picard/secrets.yml (the `atlas:` block).
+# Set them up with setupAtlasSecretsKeyring() or editSecrets() — see the
+# "Launching a Picard Study" vignette. See ?getAtlasConnection for details.
 atlasConnection <- getAtlasConnection()
 cohortManifest$setAtlasConnection(atlasConnection)
 
 # Reads cohortsLoad.csv and downloads CIRCE JSON definitions from ATLAS
-# Place your cohortsLoad.csv in inputs/cohorts/ before running this
+# Fill in inputs/cohorts/cohortsLoad.csv before running this
 cohortsLoad <- readr::read_csv(
-    here::here("inputs/cohorts/cohortsLoad.csv"), 
+    here::here("inputs/cohorts/cohortsLoad.csv"),
     show_col_types = FALSE
 )
 
-cohortManifest$importAtlasCohorts(cohortsLoad = cohortsLoad)
+cohortManifest$importAtlasCohorts(
+  cohortsLoad = cohortsLoad,
+  atlasConnection = atlasConnection
+)
 
 # Display a table of all cohorts in the manifest
 cohortManifest$tabulateManifest()
@@ -483,8 +486,8 @@ Once your analysis is tested and validated on `develop`, see [Running the Pipeli
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
-| **Setup** | Edit `inputs/cohorts/load.csv` | Define cohort metadata |
-| **Setup** | `launchConceptSetsLoadEditor()` | Interactive concept set editor |
+| **Setup** | `createBlankCohortsLoadFile()` | Scaffold `inputs/cohorts/cohortsLoad.csv` for ATLAS import |
+| **Setup** | `createBlankConceptSetsLoadFile()` | Scaffold `inputs/conceptSets/conceptSetsLoad.csv` for ATLAS import |
 | **Development** | `makeTaskFile()` | Create new analysis task |
 | **Development** | `makeSrcFile()` | (optional) Create utility/helper function file |
 | **Development** | `makeSrcSqlFile()` | (optional) Create parameterized SQL query file |
