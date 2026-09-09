@@ -62,6 +62,53 @@ testthat::test_that("importAndBind labels merged results with databaseId", {
   testthat::expect_setequal(unique(merged$databaseId), c("db_alpha", "db_beta"))
 })
 
+# Testing: result folders are written with snake_case database names, so
+# importAndBind() must not look for the raw config value when it contains upper
+# case or other characters normalized by setOutputFolder()/resolveResultsPath()
+# (issue #110).
+testthat::test_that("importAndBind reads normalized database result folders", {
+  root <- fs::file_temp(pattern = "picard-diss-case-")
+  fs::dir_create(root)
+  old_wd <- setwd(root)
+  on.exit(setwd(old_wd), add = TRUE)
+  on.exit(fs::dir_delete(root), add = TRUE)
+
+  writeLines(
+    c(
+      "default:",
+      "  databaseName: \"DATABASE_202606\"",
+      "",
+      "db_upper:",
+      "  databaseName: \"DATABASE_202606\""
+    ),
+    fs::path(root, "config.yml")
+  )
+
+  task_dir <- fs::path(root, "exec", "results", "database_202606", "dev", "01_counts")
+  fs::dir_create(task_dir, recurse = TRUE)
+  readr::write_csv(
+    tibble::tibble(cohortId = 1L, count = 10L),
+    fs::path(task_dir, "cohort_counts.csv")
+  )
+
+  suppressMessages(
+    importAndBind(
+      version = "dev",
+      taskName = "01_counts",
+      dbIds = "db_upper",
+      resultsPath = fs::path(root, "exec", "results"),
+      exportPath = fs::path(root, "dissemination", "export", "merge")
+    )
+  )
+
+  merged <- readr::read_csv(
+    fs::path(root, "dissemination", "export", "merge", "01_cohort_counts.csv"),
+    show_col_types = FALSE
+  )
+
+  testthat::expect_identical(unique(merged$databaseId), "DATABASE_202606")
+})
+
 # Testing: the shipped dissemination template inspects the merged results with
 # the same column name importAndBind() writes.
 testthat::test_that("dissemination script template reads databaseId from merged results", {

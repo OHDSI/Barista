@@ -22,12 +22,12 @@
 #' Folder structure expected:
 #' ```
 #' exec/results/
-#'   databaseName1/
+#'   normalized_database_name1/
 #'     version/
 #'       taskName/
 #'         file1.csv
 #'         file2.csv
-#'   databaseName2/
+#'   normalized_database_name2/
 #'     version/
 #'       taskName/
 #'         file1.csv
@@ -48,12 +48,15 @@ importAndBind <- function(version, taskName, dbIds, resultsPath = here::here("ex
     taskPrefix <- gsub("(^-+|-+$)", "", taskPrefix)
   }
   
-  # Get database names from config
+  # Get database names from config. Result folders are written with the same
+  # snake_case database segment used by setOutputFolder()/resolveResultsPath(),
+  # while databaseId labels in merged data preserve the configured name.
   databaseNames <- purrr::map_chr(dbIds, ~config::get("databaseName", config = .x))
+  databaseFolderNames <- snakecase::to_snake_case(databaseNames)
   
   # Build task folder paths for each database
   taskFolders <- purrr::map_chr(
-    databaseNames,
+    databaseFolderNames,
     ~fs::path(resultsPath, .x, version, taskName)
   )
   
@@ -588,13 +591,13 @@ validateCohortResults <- function(exportPath = here::here("dissemination/export/
 #' Expected folder structure:
 #' ```
 #' exec/results/
-#'   databaseName1/
+#'   normalized_database_name1/
 #'     version/
 #'       task1/
 #'         results.csv
 #'       task2/
 #'         results.csv
-#'   databaseName2/
+#'   normalized_database_name2/
 #'     version/
 #'       task1/
 #'         results.csv
@@ -642,8 +645,10 @@ runPostProcessing <- function(pipelineVersion, dbIds, resultsPath = here::here("
     cli::cli_alert_info("Skipping environment capture for non-production version")
   }
   
-  # Get database names and labels from config
+  # Get database names and labels from config. Result folders are written with
+  # the same snake_case database segment used by setOutputFolder()/resolveResultsPath().
   databaseNames <- purrr::map_chr(dbIds, ~config::get("databaseName", config = .x))
+  databaseFolderNames <- snakecase::to_snake_case(databaseNames)
   databaseLabels <- purrr::map_chr(dbIds, ~config::get("databaseLabel", config = .x))
   cohortTableNames <- purrr::map_chr(dbIds, ~config::get("cohortTable", config = .x))
   
@@ -657,7 +662,7 @@ runPostProcessing <- function(pipelineVersion, dbIds, resultsPath = here::here("
   )
   
   # Build path to first database's version folder
-  firstDbVersionPath <- fs::path(resultsPath, databaseNames[1], pipelineVersion)
+  firstDbVersionPath <- fs::path(resultsPath, databaseFolderNames[1], pipelineVersion)
   
   if (!dir.exists(firstDbVersionPath)) {
     cli::cli_alert_danger("Version folder not found: {fs::path_rel(firstDbVersionPath)}")
