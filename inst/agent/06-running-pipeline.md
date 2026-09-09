@@ -39,36 +39,50 @@ Production mode places versioned results in `exec/results/[database]/[version]/`
 
 ## Test Mode Namespaces (Avoiding Multi-User `dev` Conflicts)
 
-When multiple users run test mode at the same time, sharing the default `dev`
-namespace can cause collisions in both result folders and cohort table names.
+`pipelineVersion` is interpreted by execution mode:
 
-Use `testStudyPipeline(testLabel = ...)` to isolate your test run:
+- **Production** — it is the semantic study version (e.g. `1.2.0`), managed for
+  you by the version-increment prompt.
+- **Test** — it is a *namespace*: a label that isolates one analyst's test run
+  from another's when several people share the same database schema. The
+  default is `"dev"`.
+
+When multiple users run test mode at once, all sharing the `dev` namespace,
+their result folders and cohort tables collide. Pass a distinct
+`pipelineVersion` to keep runs separate:
 
 ```{r eval = FALSE}
-# Default test namespace (legacy behavior)
+# Default test namespace
 testStudyPipeline(configBlock = "primaryDB")
 
 # Custom namespace for your branch or feature
 testStudyPipeline(
   configBlock = "primaryDB",
-  testLabel = "feature_ml_test"
+  pipelineVersion = "feature_ml_test"
 )
 ```
 
-What `testLabel` controls:
+The one `pipelineVersion` value drives, consistently:
 
-- **Results path namespace** under `exec/results/[database]/[testLabel]/...`
-- **Cohort table suffix** in execution settings (for example `_feature_ml_test`)
+- the **results folder** — `exec/results/[database]/[pipelineVersion]/...`
+- the **cohort table suffix** — e.g. `cohort_table_feature_ml_test`
+- the **task-history namespace** in `exec/logs/task_run_history.csv`, so a
+  rerun check never confuses one analyst's run with another's
 
-Normalization rules for `testLabel`:
+A test `pipelineVersion` is normalized — lowercased, non-alphanumeric runs
+collapsed to `_`, leading/trailing `_` trimmed. It is **not** truncated: a
+namespace that would push a cohort table name past 60 characters is rejected
+up front rather than silently shortened into a name that no longer matches its
+results folder.
 
-- converted to lowercase
-- non-alphanumeric characters converted to `_`
-- repeated/edge underscores trimmed
-- truncated to 24 characters
+`testStudyTask()` takes the same `pipelineVersion` argument, so single-task and
+full-pipeline testing land in the same namespace.
 
-This behavior is **test mode only**. Production execution remains strict and
-uses semantic versioning with no custom suffix overrides.
+This applies to **test mode only**. Production execution stays strict and uses
+semantic versioning with no custom suffix.
+
+> **Renamed in 0.0.7:** the `testLabel` argument to `testStudyPipeline()` is now
+> `pipelineVersion`. Update any `testStudyPipeline(testLabel = "...")` calls.
 
 ## Running Production Mode
 

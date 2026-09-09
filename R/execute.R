@@ -200,13 +200,20 @@ updateStudyVersion <- function(versionNumber, projectPath = here::here()) {
 #'   Output will be saved to \code{exec/results/{databaseName}/{pipelineVersion}/00_buildCohorts/}.
 #'   Non-semver values (e.g. "dev") also trigger dev cohort table routing via
 #'   \code{createExecutionSettingsFromConfig()}.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied, its pipeline version and result-path rules are used.
 #' @param override Logical. If TRUE, skips the user confirmation prompt and proceeds
 #'   directly with cohort generation. Defaults to FALSE.
 #' @return Invisibly returns the cohort counts data frame (id, label, tags, 
 #'   cohort_entries, cohort_subjects). Also saves counts to cohortCounts.csv in the 
 #'   output folder.
 #' @export
-generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE) {
+generateCohorts <- function(executionSettings, pipelineVersion,
+                            executionContext = NULL, override = FALSE) {
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
   
   # Check if cohortManifest exists
   cohortsFolderPath <- here::here("inputs/cohorts")
@@ -309,16 +316,13 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
     cli::cli_alert_success("Cohort generation completed successfully!")
     
     # Save cohort counts to output folder
-    databaseName <- executionSettings$databaseName
-    dbNameSnake <- snakecase::to_snake_case(databaseName)
-    
-    outputFolder <- fs::path(
-      here::here("exec/results"),
-      dbNameSnake,
-      pipelineVersion,
-      "00_buildCohorts"
+    outputFolder <- resolveResultsPath(
+      executionSettings = executionSettings,
+      pipelineVersion = pipelineVersion,
+      taskName = "00_buildCohorts",
+      executionContext = executionContext
     )
-    
+
     # Create output folder if it doesn't exist
     if (!dir.exists(outputFolder)) {
       dir.create(outputFolder, recursive = TRUE, showWarnings = FALSE)
@@ -397,14 +401,22 @@ formatErrorDetail <- function(e) {
 #'   here; \code{execute_pipeline()} computes it once and passes it in so the
 #'   manifest is not re-loaded for every task. Recorded with the run and used
 #'   for the rerun check.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied it owns namespace derivation (cohort-table suffix, results
+#'   folder) and `pipelineVersion` is taken from it.
 #' @keywords internal
 execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
                          checkStatus = FALSE,
                          env = rlang::caller_env(),
-                         cohortTableSuffix = NULL,
                          codeState = NULL,
                          logFilePath = NULL,
-                         cohortManifestHash = NULL) {
+                         cohortManifestHash = NULL,
+                         executionContext = NULL) {
+
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
 
   commitSha <- codeState$sha %||% NA_character_
   codeStateLabel <- codeState$status %||% "unrecorded"
@@ -438,12 +450,14 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 
   # Check task status if requested
   if (checkStatus) {
-    # Build execution settings from configBlock
+    # Build execution settings from configBlock. When an ExecutionContext is
+    # supplied it owns namespace derivation; otherwise the non-semver
+    # pipelineVersion is used as the test cohort-table suffix.
     tryCatch({
       executionSettings <- createExecutionSettingsFromConfig(
         configBlock = configBlock,
         pipelineVersion = pipelineVersion,
-        cohortTableSuffix = cohortTableSuffix
+        executionContext = executionContext
       )
     }, error = function(e) {
       cli::cli_alert_warning("Could not create execution settings for task status check: {e$message}")
@@ -546,11 +560,17 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 }
 
 #' @title Test a Single Study Task
-#' @description Executes a single task in test mode using the "dev" pipeline version.
-#'   Checks that you're not on main branch, then runs the task with checkStatus = TRUE.
-#'   Useful for testing individual task changes before running full pipeline.
+#' @description Executes a single task in test mode using the supplied
+#'   \code{pipelineVersion} as its test namespace. Checks that you are not on the
+#'   main branch, then runs the task with \code{checkStatus = TRUE}. Useful for
+#'   testing individual task changes before running the full pipeline.
 #' @param taskFile Character. The name of the task file (base name only, no path).
 #' @param configBlock Character. The name of the config block to use.
+#' @param pipelineVersion Character. Test namespace for this run — drives the
+#'   cohort table suffix, the \code{exec/results/} folder, and the task-history
+#'   namespace. Defaults to \code{"dev"}. Normalized to lowercase snake_case; an
+#'   over-long namespace is rejected rather than truncated. Use the same value
+#'   here and in \code{testStudyPipeline()}.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns the task result
 #' @export
@@ -559,10 +579,18 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 #' # Test a task on develop branch
 #' testStudyTask("01_generate_cohorts.R", configBlock = "myConfig")
 #' }
-testStudyTask <- function(taskFile, configBlock, env = rlang::caller_env()) {
+testStudyTask <- function(
+  taskFile, 
+  configBlock, 
+  pipelineVersion = "dev",
+  env = rlang::caller_env()
+) {
   checkmate::assert_string(taskFile, min.chars = 1)
   checkmate::assert_string(configBlock, min.chars = 1)
-  
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
+
+  pipelineVersion <- normalizePipelineVersion(pipelineVersion)
+
   # Check branch
   branch <- get_current_branch()
   if (branch == "main") {
@@ -574,37 +602,15 @@ testStudyTask <- function(taskFile, configBlock, env = rlang::caller_env()) {
   
   cli::cli_rule("TEST Mode: Study Task")
   cli::cli_alert_warning("Testing on branch: {branch}")
-  cli::cli_alert_info("Using DEV version for test run")
+  cli::cli_alert_info("Using test pipeline version: {pipelineVersion}")
   
   execute_task(
     taskFile = taskFile,
     configBlock = configBlock,
-    pipelineVersion = "dev",
+    pipelineVersion = pipelineVersion,
     checkStatus = TRUE,
     env = env
   )
-}
-
-#' @keywords internal
-normalizeTestNamespaceLabel <- function(label, maxChars = 24) {
-  checkmate::assert_string(label, min.chars = 1)
-  checkmate::assert_int(maxChars, lower = 1)
-
-  normalized <- tolower(trimws(label))
-  normalized <- gsub("[^a-z0-9]+", "_", normalized)
-  normalized <- gsub("^_+|_+$", "", normalized)
-  normalized <- gsub("_+", "_", normalized)
-
-  if (normalized == "") {
-    stop("test label must contain at least one letter or number")
-  }
-
-  if (nchar(normalized) > maxChars) {
-    normalized <- substr(normalized, 1, maxChars)
-    cli::cli_alert_warning("Test label truncated to {maxChars} characters: {normalized}")
-  }
-
-  normalized
 }
 
 #' @title Core Pipeline Execution Logic
@@ -613,8 +619,10 @@ normalizeTestNamespaceLabel <- function(label, maxChars = 24) {
 #' @param configBlock name of one or multiple configBlock to use in the execution
 #' @param updateType the type of version increment: 'major', 'minor', or 'patch'. 
 #'   Only used when testMode = FALSE.
-#' @param testMode Logical. If TRUE, skips all validations and uses "dev" version.
-#'   If FALSE, enforces code validation and version management. Default: FALSE
+#' @param testMode Logical. If TRUE, uses test namespace/version handling and
+#'   skips production version management. Public test entry points still apply
+#'   the main-branch guard. If FALSE, enforces production version management.
+#'   Default: FALSE
 #' @param skipRenv Logical. If TRUE, skips renv validation. Default: FALSE
 #' @param skipConnectivityCheck Logical. If TRUE (default), skips the optional
 #'   database connectivity pre-flight check. Set to FALSE to attempt a test
@@ -625,10 +633,10 @@ normalizeTestNamespaceLabel <- function(label, maxChars = 24) {
 #' @param skipCodeStateCheck Logical. If TRUE, skips the code-state check
 #'   entirely. Default: FALSE
 #' @param env the execution environment
-#' @param pipelineVersionOverride Character. Optional test-mode override for
-#'   the pipeline version folder label.
-#' @param cohortTableSuffix Character. Optional test-mode suffix used for
-#'   cohort table names.
+#' @param pipelineVersionOverride Character. Optional test-mode override for the
+#'   pipeline version (the test namespace). Drives the cohort-table suffix, the
+#'   results folder, and the task-history namespace via the run's
+#'   `ExecutionContext`.
 #' @return Invisibly returns task results list
 #' @keywords internal
 execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
@@ -636,21 +644,14 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
                              ignoreUncommittedPaths = NULL,
                              skipCodeStateCheck = FALSE,
                              env = rlang::caller_env(),
-                             pipelineVersionOverride = NULL,
-                             cohortTableSuffix = NULL) {
+                             pipelineVersionOverride = NULL) {
   
   # Compute prospective pipeline version (needed for pre-flight checks)
   if (testMode) {
     if (is.null(pipelineVersionOverride)) {
       pipelineVersion <- "dev"
     } else {
-      pipelineVersion <- normalizeTestNamespaceLabel(pipelineVersionOverride)
-    }
-
-    if (is.null(cohortTableSuffix)) {
-      cohortTableSuffixResolved <- normalizeTestNamespaceLabel(pipelineVersion)
-    } else {
-      cohortTableSuffixResolved <- normalizeTestNamespaceLabel(cohortTableSuffix)
+      pipelineVersion <- normalizePipelineVersion(pipelineVersionOverride)
     }
 
     currentVersion <- NULL
@@ -659,12 +660,6 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     if (!is.null(pipelineVersionOverride)) {
       cli::cli_abort("pipelineVersionOverride is only supported when testMode = TRUE")
     }
-
-    if (!is.null(cohortTableSuffix)) {
-      cli::cli_abort("cohortTableSuffix is only supported when testMode = TRUE")
-    }
-
-    cohortTableSuffixResolved <- NULL
 
     # Validate updateType
     updateType <- tolower(trimws(updateType))
@@ -706,6 +701,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     pipelineVersion <- paste0(versionParts, collapse = ".")
   }
 
+  executionContext <- newExecutionContext(
+    pipelineVersion,
+    testMode = testMode,
+    execPath = here::here("exec/results")
+  )
+  pipelineVersion <- executionContext$getPipelineVersion()
+
   # Run all pre-flight checks — consolidated banner before any execution
   preFlightResult <- runPreflightChecks(
     configBlock = configBlock,
@@ -743,14 +745,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     })
   }
   
-  # Create execution settings from first configBlock.
-  # Forwarding pipelineVersion so that dev versions (non-semver) automatically
-  # route cohort generation to the _dev table, leaving the production table untouched.
+  # Create execution settings from first configBlock. The ExecutionContext owns
+  # namespace derivation (cohort-table suffix, results folder, task history).
   tryCatch({
     executionSettings <- createExecutionSettingsFromConfig(
       configBlock = configBlock[1],
       pipelineVersion = pipelineVersion,
-      cohortTableSuffix = cohortTableSuffixResolved
+      executionContext = executionContext
     )
     cli::cli_alert_success("Execution settings created for config: {configBlock[1]}")
   }, error = function(e) {
@@ -816,6 +817,7 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     generateCohorts(
       executionSettings = executionSettings,
       pipelineVersion = pipelineVersion,
+      executionContext = executionContext,
       override = TRUE
     )
   }, error = function(e) {
@@ -849,12 +851,12 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
           taskFile = taskName,
           configBlock = configBlock[db],
           pipelineVersion = pipelineVersion,
-          cohortTableSuffix = cohortTableSuffixResolved,
           checkStatus = TRUE,
           env = env,
           codeState = codeState,
           logFilePath = logFilePath,
-          cohortManifestHash = cohortManifestHash
+          cohortManifestHash = cohortManifestHash,
+          executionContext = executionContext
         )
         
         appendLogLine(logFilePath, glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] ✓ Task completed successfully"))
@@ -917,13 +919,15 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 }
 
 #' @title Test Study Pipeline
-#' @description Executes the full study pipeline in test mode using the "dev" pipeline version.
-#'   Skips all git validation, renv checks, and version management. Useful for iterative 
-#'   testing during development.
+#' @description Executes the full study pipeline in test mode. The
+#'   pipelineVersion value is interpreted as the test namespace and is
+#'   used for test cohort tables and output folders. Test runs are allowed on
+#'   development branches but rejected on the main branch.
 #' @param configBlock Character or character vector. Name(s) of config block(s) to use.
-#' @param testLabel Character. Label used for test output folder and cohort table suffix.
-#'   Defaults to \code{"dev"}. Label is normalized to lowercase snake_case and
-#'   truncated to 24 characters.
+#' @param pipelineVersion Character. Test namespace used for output folders and
+#'   cohort table suffix. Defaults to \code{"dev"}. The value is normalized to
+#'   lowercase snake_case; an over-long namespace is rejected rather than
+#'   truncated.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns task results list
 #' @export
@@ -932,14 +936,14 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 #' # Test full pipeline on develop branch
 #' testStudyPipeline(configBlock = "myConfig")
 #' # Test full pipeline with a custom namespace
-#' testStudyPipeline(configBlock = "myConfig", testLabel = "feature_ml_test")
+#' testStudyPipeline(configBlock = "myConfig", pipelineVersion = "feature_ml_test")
 #' }
-testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::caller_env()) {
+testStudyPipeline <- function(configBlock, pipelineVersion = "dev", env = rlang::caller_env()) {
   checkmate::assert_character(configBlock, min.len = 1, any.missing = FALSE)
-  checkmate::assert_string(testLabel, min.chars = 1)
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
 
-  testLabel <- normalizeTestNamespaceLabel(testLabel)
-  
+  pipelineVersion <- normalizePipelineVersion(pipelineVersion)
+
   # Check branch
   branch <- get_current_branch()
   if (branch == "main") {
@@ -951,13 +955,12 @@ testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::calle
   
   cli::cli_rule("TEST Mode: Study Pipeline")
   cli::cli_alert_warning("Testing on branch: {branch}")
-  cli::cli_alert_info("Using test label: {testLabel}")
+  cli::cli_alert_info("Using test pipeline version: {pipelineVersion}")
   
   execute_pipeline(
     configBlock = configBlock,
     testMode = TRUE,
-    pipelineVersionOverride = testLabel,
-    cohortTableSuffix = testLabel,
+    pipelineVersionOverride = pipelineVersion,
     skipRenv = TRUE,
     env = env
   )

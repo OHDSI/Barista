@@ -9,7 +9,9 @@
 #'      when no hash was recorded (first run, or a legacy history row), or when
 #'      the current hash cannot be computed at all.
 #'   4. Previous run errors (checked in logs and history)
-#'   5. Version changes
+#'   5. Version changes. History is scoped by task, config block, and
+#'      `pipeline_version`, so separate test namespaces do not reuse one
+#'      another's run state.
 #'
 #' @param taskFile Character. Name or path of the task file (e.g., "task1.R")
 #' @param configBlock Character. The config block name (e.g., "optum_dod")
@@ -73,10 +75,13 @@ shouldRerunTask <- function(
 
   historyDf <- .initializeTaskHistory(historyFile)
 
-  # Find previous runs for this task+config block
+  # Find previous runs for this task, config block, and pipeline namespace.
+  # Legacy rows without a pipeline_version are retained by the history reader
+  # but intentionally do not match a named run, forcing a safe rerun.
   previousRuns <- historyDf[
     historyDf$task_name == basename(taskFile) &
-      historyDf$config_block == configBlock,
+      historyDf$config_block == configBlock &
+      historyDf$pipeline_version == pipelineVersion,
     ]
 
   lastRunInfo <- NULL
@@ -132,16 +137,8 @@ shouldRerunTask <- function(
     rerunNeeded <- TRUE
   }
 
-  # Check 5: Pipeline version changed and last run was on different version
-  if (!is.null(lastRunInfo) && lastRunInfo$pipeline_version != pipelineVersion) {
-    reasons <- c(reasons, paste(
-      "Pipeline version changed from",
-      lastRunInfo$pipeline_version, "to", pipelineVersion
-    ))
-    rerunNeeded <- TRUE
-  }
-
-  # If no reasons found, task is up to date
+  # If no reasons found, task is up to date. Version is part of the lookup
+  # key above, so a different namespace cannot be selected as lastRunInfo.
   if (length(reasons) == 0) {
     reasons <- "No changes detected - task is up to date"
     message <- cli::format_inline("Task {.file {basename(taskFile)}} is up to date and can be skipped")

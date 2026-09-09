@@ -50,7 +50,9 @@ recorded on the previous run. A rerun is forced when the hash differs,
 when no hash was recorded (first run, or a legacy history row), or when
 the current hash cannot be computed at all.
 \item Previous run errors (checked in logs and history)
-\item Version changes
+\item Version changes. History is scoped by task, config block, and
+\code{pipeline_version}, so separate test namespaces do not reuse one
+another's run state.
 }
 }
 \details{

@@ -1,6 +1,36 @@
 # picard 0.0.7
 
+## Breaking Changes
+
+- `testStudyPipeline()` — the `testLabel` argument is renamed to `pipelineVersion`.
+  `testStudyPipeline(configBlock, testLabel = "feature_x")` becomes
+  `testStudyPipeline(configBlock, pipelineVersion = "feature_x")`. The value has
+  the same meaning (a test-mode namespace) and the same normalization, so only
+  the argument name changes. There is no compatibility shim — a stray
+  `testLabel =` now raises `unused argument`.
+
 ## New Features
+
+### Unified Test-Mode Namespaces
+
+- In test mode, `pipelineVersion` is a single namespace that now drives the
+  cohort table suffix, the `exec/results/<database>/<namespace>/` folder, **and**
+  the task-run-history namespace consistently. Previously the results folder
+  honored the label while cohort generation could fall back to `_dev`, so a
+  task would look for a table that cohort generation never created
+  (issue [#104](https://github.com/OHDSI/Picard/issues/104)).
+- `testStudyTask()` gains a `pipelineVersion` argument (default `"dev"`), so
+  single-task and full-pipeline testing share one namespace. Two analysts on the
+  same branch and schema can now run `pipelineVersion = "dev_ml"` and
+  `pipelineVersion = "dev_ks"` without colliding — separate cohort tables,
+  separate result folders, and separate rerun state in
+  `exec/logs/task_run_history.csv`.
+- A test namespace is normalized (lowercase, non-alphanumeric runs collapsed to
+  `_`) but no longer silently truncated: a namespace that would produce a cohort
+  table name longer than 60 characters is rejected before any database work.
+- `pipelineVersion` remains the production semantic version in production mode;
+  the branch guard (test and production runs are both refused on `main`) is
+  unchanged.
 
 ### Code State Escape Hatches
 
@@ -34,6 +64,7 @@
 
 ## Bug Fixes
 
+- `createExecutionSettingsFromConfig()` now honors its documented default: `pipelineVersion = "prod"` (or a `MAJOR.MINOR.PATCH` version) uses the configured cohort table unchanged. Previously `"prod"` was treated as a non-semver test namespace and produced a `_prod`-suffixed table.
 - Fixed cohort-manifest change detection for task reruns (`shouldRerunTask()`), which was broken three ways at once, so editing a cohort definition never re-ran the tasks that used it:
   - The hash helper called `CohortDef$getHash()`, a method renamed to `getSqlHash()` months earlier, so it always errored and returned `NA`.
   - An `NA` hash *disabled* the manifest check instead of forcing a rerun (masking the first bug once a study had any cohorts).

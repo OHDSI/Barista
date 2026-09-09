@@ -14,7 +14,8 @@ setOutputFolder(
 \arguments{
 \item{executionSettings}{An ExecutionSettings object containing the databaseName attribute}
 
-\item{pipelineVersion}{A character string specifying the pipelineVersion of the analysis (e.g., "0.0.1", "1.0.2")}
+\item{pipelineVersion}{A character string specifying the pipeline version of the
+analysis: a test namespace (e.g. \code{"develop_ml"}) or a semantic version (e.g. \code{"1.0.2"}).}
 
 \item{taskName}{The name of the task for which to create the output folder}
 
@@ -24,5 +25,12 @@ setOutputFolder(
 The path to the created output folder
 }
 \description{
-Create an output folder for a specific task within the results directory, organized by database name and pipelineVersion.
+Create an output folder for a specific task within the results
+directory, organized by database name and pipeline version.
+
+The pipeline-version path segment is derived through \link{ExecutionContext} so it
+always matches the cohort-table suffix produced by
+\code{\link[=createExecutionSettingsFromConfig]{createExecutionSettingsFromConfig()}}: a non-semver (test) \code{pipelineVersion}
+such as \code{"develop_ml"} is normalized to lowercase snake_case, and a semantic
+version such as \code{"1.0.2"} is used unchanged.
 }

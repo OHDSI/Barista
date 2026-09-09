@@ -243,10 +243,20 @@ createExecutionSettings <- function(connectionDetails,
 #' @param tempEmulationSchema Character. Override for temp emulation schema.
 #' @param cohortTable Character. Override for cohort table name.
 #' @param databaseName Character. Override for human-readable database name.
-#' @param pipelineVersion Character. Pipeline version ("prod" for production table, "dev" or "0.0.1" etc.).
+#' @param pipelineVersion Character. \code{"prod"} (the default) or a
+#'   \code{MAJOR.MINOR.PATCH} version means "use the configured production cohort
+#'   table unchanged". Any other value (e.g. \code{"dev"}, \code{"develop_ml"}) is
+#'   treated as a test namespace and routes to a suffixed cohort table. Ignored
+#'   when \code{executionContext} is supplied.
 #' @param cohortTableSuffix Character. Optional suffix for cohort table names in
-#'   non-semver (test) runs. Normalized to lowercase snake_case and truncated to
-#'   24 characters. If NULL, non-semver runs default to \code{"_dev"}.
+#'   non-semver (test) runs. Normalized to lowercase snake_case via
+#'   \code{normalizePipelineVersion()}. If NULL, the non-semver
+#'   \code{pipelineVersion} is used as the suffix. The derived table name is
+#'   rejected if it exceeds \code{MAX_TEST_COHORT_TABLE_NAME_LENGTH} characters.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied, its mode and normalized `pipelineVersion` control cohort
+#'   table routing. The legacy `pipelineVersion` and `cohortTableSuffix`
+#'   arguments remain available for direct callers.
 #'
 #' @details
 #' Credentials are loaded from secrets.yml (default \code{~/.picard/secrets.yml}).
@@ -272,7 +282,13 @@ createExecutionSettingsFromConfig <- function(
     cohortTable = NULL,
     databaseName = NULL,
     pipelineVersion = "prod",
-    cohortTableSuffix = NULL) {
+    cohortTableSuffix = NULL,
+    executionContext = NULL) {
+
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
 
   if (!file.exists(configFilePath)) {
     stop("Config file not found: ", configFilePath)
@@ -334,34 +350,20 @@ createExecutionSettingsFromConfig <- function(
     stop("'cohortTable' not specified in config or as parameter")
   }
 
-  # Route to dev cohort table for any non-semver pipeline version (e.g. "dev", "test").
-  # Semantic versions ("1.0.0", "2.1.3") always use the production table from config.
-  is_dev_version <- !grepl("^\\d+\\.\\d+\\.\\d+$", pipelineVersion)
+  # The mode + namespace rule — test suffix, table-name length ceiling, and
+  # production passthrough — lives entirely in ExecutionContext$deriveCohortTable().
+  if (!is.null(cohortTableSuffix) && is.null(executionContext) &&
+      isProductionPipelineVersion(pipelineVersion)) {
+    stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
+  }
 
-  if (!is.null(cohortTableSuffix)) {
-    if (!is_dev_version) {
-      stop("cohortTableSuffix can only be used with non-semver test pipeline versions")
-    }
+  ctx <- executionContext %||% newExecutionContext(cohortTableSuffix %||% pipelineVersion)
+  cohortTable <- ctx$deriveCohortTable(cohortTable)
 
-    suffix <- tolower(trimws(cohortTableSuffix))
-    suffix <- gsub("[^a-z0-9]+", "_", suffix)
-    suffix <- gsub("^_+|_+$", "", suffix)
-    suffix <- gsub("_+", "_", suffix)
-
-    if (suffix == "") {
-      stop("cohortTableSuffix must contain at least one letter or number")
-    }
-
-    if (nchar(suffix) > 24) {
-      suffix <- substr(suffix, 1, 24)
-      cli::cli_alert_warning("cohortTableSuffix truncated to 24 characters: {.val {suffix}}")
-    }
-
-    cohortTable <- paste0(cohortTable, "_", suffix)
-    cli::cli_alert_info("Test pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}")
-  } else if (is_dev_version) {
-    cohortTable <- paste0(cohortTable, "_dev")
-    cli::cli_alert_info("Dev pipeline version ({pipelineVersion}) — cohort table set to: {.val {cohortTable}}")
+  if (identical(ctx$getMode(), "test")) {
+    cli::cli_alert_info(
+      "Test pipeline version ({ctx$getPipelineVersion()}) — cohort table set to: {.val {cohortTable}}"
+    )
   }
 
   # Create and return ExecutionSettings
@@ -377,17 +379,32 @@ createExecutionSettingsFromConfig <- function(
 }
 
 #' @title Set Output Folder for Task
-#' @description Create an output folder for a specific task within the results directory, organized by database name and pipelineVersion.
+#' @description Create an output folder for a specific task within the results
+#'   directory, organized by database name and pipeline version.
+#'
+#'   The pipeline-version path segment is derived through [ExecutionContext] so it
+#'   always matches the cohort-table suffix produced by
+#'   [createExecutionSettingsFromConfig()]: a non-semver (test) `pipelineVersion`
+#'   such as `"develop_ml"` is normalized to lowercase snake_case, and a semantic
+#'   version such as `"1.0.2"` is used unchanged.
 #' @param executionSettings An ExecutionSettings object containing the databaseName attribute
-#' @param pipelineVersion A character string specifying the pipelineVersion of the analysis (e.g., "0.0.1", "1.0.2")
+#' @param pipelineVersion A character string specifying the pipeline version of the
+#'   analysis: a test namespace (e.g. `"develop_ml"`) or a semantic version (e.g. `"1.0.2"`).
 #' @param taskName The name of the task for which to create the output folder
 #' @param execPath The base path for results (default is "exec/results" within the project)
 #' @return The path to the created output folder
 #' @export
 setOutputFolder <- function(executionSettings, pipelineVersion, taskName, execPath = here::here("exec/results")) {
-  dbNameSnake <- snakecase::to_snake_case(executionSettings$databaseName)
-  outputFolder <- fs::path(execPath, dbNameSnake, pipelineVersion, taskName) |>
+  checkmate::assert_string(taskName, min.chars = 1)
+
+  outputFolder <- resolveResultsPath(
+    executionSettings = executionSettings,
+    pipelineVersion = pipelineVersion,
+    taskName = taskName,
+    execPath = execPath
+  ) |>
     fs::dir_create()
+
   return(outputFolder)
 }
 
