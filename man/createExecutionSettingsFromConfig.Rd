@@ -14,7 +14,8 @@ createExecutionSettingsFromConfig(
   cohortTable = NULL,
   databaseName = NULL,
   pipelineVersion = "prod",
-  cohortTableSuffix = NULL
+  cohortTableSuffix = NULL,
+  executionContext = NULL
 )
 }
 \arguments{
@@ -34,11 +35,22 @@ createExecutionSettingsFromConfig(
 
 \item{databaseName}{Character. Override for human-readable database name.}
 
-\item{pipelineVersion}{Character. Pipeline version ("prod" for production table, "dev" or "0.0.1" etc.).}
+\item{pipelineVersion}{Character. \code{"prod"} (the default) or a
+\code{MAJOR.MINOR.PATCH} version means "use the configured production cohort
+table unchanged". Any other value (e.g. \code{"dev"}, \code{"develop_ml"}) is
+treated as a test namespace and routes to a suffixed cohort table. Ignored
+when \code{executionContext} is supplied.}
 
 \item{cohortTableSuffix}{Character. Optional suffix for cohort table names in
-non-semver (test) runs. Normalized to lowercase snake_case and truncated to
-24 characters. If NULL, non-semver runs default to \code{"_dev"}.}
+non-semver (test) runs. Normalized to lowercase snake_case via
+\code{normalizePipelineVersion()}. If NULL, the non-semver
+\code{pipelineVersion} is used as the suffix. The derived table name is
+rejected if it exceeds \code{MAX_TEST_COHORT_TABLE_NAME_LENGTH} characters.}
+
+\item{executionContext}{An optional \code{ExecutionContext} for the current run.
+When supplied, its mode and normalized \code{pipelineVersion} control cohort
+table routing. The legacy \code{pipelineVersion} and \code{cohortTableSuffix}
+arguments remain available for direct callers.}
 }
 \value{
 An ExecutionSettings object with populated connectionDetails

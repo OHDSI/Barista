@@ -4,7 +4,12 @@
 \alias{generateCohorts}
 \title{Generate Cohorts for Pipeline Execution}
 \usage{
-generateCohorts(executionSettings, pipelineVersion, override = FALSE)
+generateCohorts(
+  executionSettings,
+  pipelineVersion,
+  executionContext = NULL,
+  override = FALSE
+)
 }
 \arguments{
 \item{executionSettings}{An ExecutionSettings object containing database configuration
@@ -17,6 +22,9 @@ production cohort table.}
 Output will be saved to \code{exec/results/{databaseName}/{pipelineVersion}/00_buildCohorts/}.
 Non-semver values (e.g. "dev") also trigger dev cohort table routing via
 \code{createExecutionSettingsFromConfig()}.}
+
+\item{executionContext}{An optional \code{ExecutionContext} for the current run.
+When supplied, its pipeline version and result-path rules are used.}
 
 \item{override}{Logical. If TRUE, skips the user confirmation prompt and proceeds
 directly with cohort generation. Defaults to FALSE.}

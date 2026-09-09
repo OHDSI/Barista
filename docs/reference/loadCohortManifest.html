@@ -16,7 +16,7 @@ suggesting the appropriate $add*() method."><!-- mathjax --><script src="https:/
     
     <a class="navbar-brand me-2" href="../index.html">picard</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.0.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.0.7</small>
 
     
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -80,13 +80,22 @@ suggesting the appropriate <code>$add*()</code> method.</p>
     <div class="section level2">
     <h2 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h2>
     <dl><dt>cohortsFolderPath</dt>
-<dd><p>Character. Path to the cohorts folder containing the manifest
-database. Defaults to <code>here::here("inputs/cohorts")</code>.</p></dd>
+<dd><p>Character. Path to the cohorts folder, or anywhere
+inside the study repository. Defaults to <code>here::here("inputs/cohorts")</code>. The
+repository root is discovered with <code><a href="findStudyProjectRoot.html">findStudyProjectRoot()</a></code> and the manifest
+is always read from <code>&lt;root&gt;/inputs/cohorts/cohortManifest.sqlite</code>.</p></dd>
 
 
 <dt>executionSettings</dt>
 <dd><p>An ExecutionSettings object containing database configuration
 for cohort generation. Optional; can be added later using <code>$setExecutionSettings()</code>.</p></dd>
+
+
+<dt>autoSync</dt>
+<dd><p>Logical. If TRUE (default), reconcile the manifest against the
+files on disk after loading (see <code>$syncManifest()</code>). This only affects
+file/row reconciliation — it is <strong>not</strong> related to path resolution, and
+setting it to FALSE is not a workaround for a manifest that fails to load.</p></dd>
 
 
 <dt>verbose</dt>
@@ -105,7 +114,25 @@ for cohort generation. Optional; can be added later using <code>$setExecutionSet
 error directing the user to <code><a href="initCohortManifest.html">initCohortManifest()</a></code>.</p>
 <p>After loading, the function checks for new files in <code>json/</code>, <code>sql/</code>, and <code>derived/</code>
 directories that are not tracked in the manifest. These are reported as warnings
-but NOT auto-added (because <code>category</code> is required and cannot be guessed).</p>
+but NOT auto-added (because <code>category</code> is required and cannot be guessed).</p><div class="section">
+<h3 id="file-paths">File paths<a class="anchor" aria-label="anchor" href="#file-paths"></a></h3>
+
+
+<p>Cohort file paths are stored <strong>relative to the study repository root</strong> (e.g.
+<code>inputs/cohorts/json/mycohort.json</code>). Loading resolves them against that root,
+so a manifest loads identically on any machine and from any working
+directory — you do not need to <code><a href="https://rdrr.io/r/base/getwd.html" class="external-link">setwd()</a></code> into the study repo first.</p>
+<p>Manifests created before this convention may hold working-directory-relative,
+manifest-folder-relative, or absolute paths. Those still resolve through a
+compatibility fallback, but you can rewrite them to the current convention
+once with <code><a href="normalizeCohortManifestPaths.html">normalizeCohortManifestPaths()</a></code>. Ordinary loads never modify the
+SQLite file.</p>
+</div>
+
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="normalizeCohortManifestPaths.html">normalizeCohortManifestPaths()</a></code>, <code><a href="findStudyProjectRoot.html">findStudyProjectRoot()</a></code></p></div>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc"><h2>On this page</h2>
@@ -113,7 +140,7 @@ but NOT auto-added (because <code>category</code> is required and cannot be gues
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Martin Lavallee.</p>
+  <p>Developed by Martin Lavallee, Katy Sadowski.</p>
 </div>
 
 <div class="pkgdown-footer-right">

@@ -8,7 +8,6 @@ These instructions are tool-agnostic: they apply to any coding agent (Claude Cod
 
 - **Study Title**: {{studyName}}
 - **Project Name**: {{projectName}}
-- **Tool Type**: {{toolType}}
 - **Database**: {{databaseLabel}}
 - **Repository Name**: {{repoName}}
 
@@ -50,7 +49,7 @@ When in doubt: if it touches a database or mutates repository state you did not 
 ## Key Files and Folders
 
 ### Project Root
-- `config.yml` - Database and execution configuration (credentials, schemas, databases)
+- `config.yml` - Per-database schema/table settings and execution config (no credentials; those live in `~/.picard/secrets.yml`)
 - `main.R` - Main entry point for production pipeline execution
 - `README.md` - Study overview, status, team, and key links
 - `NEWS.md` - Changelog of study updates and versions

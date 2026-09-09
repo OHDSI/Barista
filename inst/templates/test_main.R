@@ -9,7 +9,7 @@
 # Use this during active development and iteration cycles.
 #
 # Key differences from main.R:
-#   • No git state validation required
+#   • No production git state validation required (main-branch guard remains)
 #   • No release branch creation
 #   • No semantic version increment
 #   • No PENDING_PR workflow
@@ -53,16 +53,19 @@ cli::cli_alert_info("Setting course for database sectors: {{paste(dbIds, collaps
 # TEST MODE CAPABILITIES:
 #   • Execute full pipeline validation and task processing
 #   • Skip environment validation (assumes development setup)
-#   • Skip git state checks (work on any branch, no cleanup required)
+#   • Skip production git state checks (main-branch guard remains active)
 #   • No version increment (results tagged as "dev")
 #   • Rapid iteration without administrative overhead
 #   • Full audit trail to exec/logs/ for review
 
 cli::cli_h2("Initiating test flight sequence...")
 
+# Test namespace. Use a distinct value per analyst when sharing a database schema.
+pipelineVersion <- "dev"
+
 taskResults <- testStudyPipeline(
   configBlock = dbIds,
-  skipRenv = FALSE  # Set to TRUE only if you've manually verified environment
+  pipelineVersion = pipelineVersion
 )
 
 cli::cli_h2("Test flight complete - all systems performing nominally.")

@@ -92,20 +92,23 @@ cohortManifest <- initCohortManifest()
 # make a load file and input atlas cohorts
 createBlankCohortsLoadFile()
 
-# ATLAS credentials must be configured in your .Renviron file before connecting.
-# Typical env vars: ATLAS_BASE_URL, ATLAS_API_TOKEN, ATLAS_SOURCE_ID, etc.
-# See ?getAtlasConnection for details on required environment variables
+# ATLAS credentials are read from ~/.picard/secrets.yml (the `atlas:` block).
+# Set them up with setupAtlasSecretsKeyring() or editSecrets() — see the
+# "Launching a Picard Study" vignette. See ?getAtlasConnection for details.
 atlasConnection <- getAtlasConnection()
 cohortManifest$setAtlasConnection(atlasConnection)
 
 # Reads cohortsLoad.csv and downloads CIRCE JSON definitions from ATLAS
-# Place your cohortsLoad.csv in inputs/cohorts/ before running this
+# Fill in inputs/cohorts/cohortsLoad.csv before running this
 cohortsLoad <- readr::read_csv(
-    here::here("inputs/cohorts/cohortsLoad.csv"), 
+    here::here("inputs/cohorts/cohortsLoad.csv"),
     show_col_types = FALSE
 )
 
-cohortManifest$importAtlasCohorts(cohortsLoad = cohortsLoad)
+cohortManifest$importAtlasCohorts(
+  cohortsLoad = cohortsLoad,
+  atlasConnection = atlasConnection
+)
 
 # Display a table of all cohorts in the manifest
 cohortManifest$tabulateManifest()
@@ -444,8 +447,12 @@ testStudyTask(
 **Parameters:**
 - `taskFile`: The base name of your task file (just the filename, no path)
 - `configBlock`: The name of your config block (e.g., the database config you want to use)
+- `pipelineVersion`: The test namespace for this run. Defaults to `"dev"`. Set a
+  distinct value (e.g. `"feature_ml_test"`) when you share a database schema with
+  other analysts — it isolates your cohort table and results folder. See
+  [Running the Pipeline](running_the_pipeline.html#test-mode-namespaces-avoiding-multi-user-dev-conflicts).
 
-This executes only the specified task, allowing rapid iteration on specific tasks without running the entire pipeline. The function automatically uses "dev" version for testing and prevents running on the `main` branch.
+This executes only the specified task, allowing rapid iteration on specific tasks without running the entire pipeline. It never runs on the `main` branch.
 
 ### Test Full Pipeline with `testStudyPipeline()`
 
@@ -453,10 +460,15 @@ Once individual tasks work, test the complete pipeline:
 
 ```{r eval = FALSE}
 testStudyPipeline(configBlock = "omop_cdm")
+
+# ...or with a namespace to avoid colliding with other analysts
+testStudyPipeline(configBlock = "omop_cdm", pipelineVersion = "feature_ml_test")
 ```
 
 **Parameters:**
 - `configBlock`: The name of your config block (can be a single value or vector of multiple configs)
+- `pipelineVersion`: The test namespace. Defaults to `"dev"`; the same value is
+  used by `testStudyTask()`.
 
 This runs all tasks in sequence (in alphabetical order) with the same configuration as production, helping you catch integration issues.
 
@@ -478,8 +490,8 @@ Once your analysis is tested and validated on `develop`, see [Running the Pipeli
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
-| **Setup** | Edit `inputs/cohorts/load.csv` | Define cohort metadata |
-| **Setup** | `launchConceptSetsLoadEditor()` | Interactive concept set editor |
+| **Setup** | `createBlankCohortsLoadFile()` | Scaffold `inputs/cohorts/cohortsLoad.csv` for ATLAS import |
+| **Setup** | `createBlankConceptSetsLoadFile()` | Scaffold `inputs/conceptSets/conceptSetsLoad.csv` for ATLAS import |
 | **Development** | `makeTaskFile()` | Create new analysis task |
 | **Development** | `makeSrcFile()` | (optional) Create utility/helper function file |
 | **Development** | `makeSrcSqlFile()` | (optional) Create parameterized SQL query file |

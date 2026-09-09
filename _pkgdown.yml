@@ -73,6 +73,7 @@ reference:
       - createAgentBranch
       - createBlankCohortsLoadFile
       - createBlankConceptSetsLoadFile
+      - createDisseminationEnv
       - createExecutionSettings
       - createExecutionSettingsFromConfig
       - createPullRequest
@@ -111,16 +112,19 @@ reference:
       - displayTaskStatusReport
       - documentDependencies
       - editSecrets
-      - expandManifestTags
+      - findStudyProjectRoot
       - formatFloats
       - formatPercentages
       - generateCohorts
       - importAndBind
       - migrateCohortManifest
       - migrateConceptSetManifest
+      - normalizeCohortManifestPaths
+      - normalizeConceptSetManifestPaths
       - pivotForComparison
       - plotCohortGraph
       - prepareDisseminationData
+      - publishStudyHubPosit
       - recordTaskExecution
       - resetCohortManifest
       - resetConceptSetManifest
@@ -143,7 +147,6 @@ reference:
       - validateConfigYaml
       - validateStudyTask
       - validateUlyssesStructure
-      - zipAndArchive
 
 development:
   mode: "auto"

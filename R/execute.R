@@ -185,56 +185,6 @@ updateStudyVersion <- function(versionNumber, projectPath = here::here()) {
 }
 
 
-#' @title Zip and Archive results from a study execution
-#' @param input the type of files to zip and archive. There are three options exportMerge, exportPretty and site. exportMerge is the merged results in long format. The exportPretty are xlsx files with formatted output from the study. The site is the html files of the studyHub
-#' @returns invisible return. Stores the input as a zip file in the exec/archive folder
-#' @export
-zipAndArchive <- function(input) {
-  #ensure input is one of three options
-  checkmate::assert_choice(x = input, choices = c("exportMerge", "exportPretty", "site"))
-
-  # make the archive folder in exec
-  if (!dir.exists("exec/archive")) {
-    archivePathRoot <- fs::dir_create("exec/archive")
-    usethis::use_git_ignore(archivePathRoot)
-  }
-
-  # get time stamp of archive
-  timeStamp <- lubridate::now() |> as.character() |> snakecase::to_snake_case()
-
-  # pull version number from config
-  repoVersion <- config::get(value = "version")
-
-  # if input is exportMerge grab results and prep for archive
-  if (input == "exportMerge") {
-    files2zip <- fs::dir_ls("dissemination/export/merge", type = "file")
-    zipFileName <- glue::glue("exec/archive/export_merge_{repoVersion}_{timeStamp}")
-  }
-
-  # if input is exportPretty grab results and prep for archive
-  if (input == "exportPretty") {
-    files2zip <- fs::dir_ls("dissemination/export/pretty", type = "file")
-    zipFileName <- glue::glue("exec/archive/export_pretty_{repoVersion}_{timeStamp}")
-  }
-
-  # if input is site grab files and prep for archive
-  if (input == "exportMerge") {
-    files2zip <- fs::dir_ls("dissemination/quarto/_site", type = "any")
-    zipFileName <- glue::glue("exec/archive/quarto_site_{repoVersion}_{timeStamp}")
-  }
-
-  # zip results and place in archive
-  utils::zip(zipfile = zipFileName, files = files2zip)
-  cli::cat_bullet(
-    glue::glue("Archived {input} to {zipFileName}."),
-    bullet = "tick",
-    bullet_col = "green"
-  )
-
-  invisible(zipFileName)
-
-}
-
 
 #' @title Generate Cohorts for Pipeline Execution
 #' @description Loads the cohort manifest, displays the cohorts to be generated,
@@ -250,13 +200,20 @@ zipAndArchive <- function(input) {
 #'   Output will be saved to \code{exec/results/{databaseName}/{pipelineVersion}/00_buildCohorts/}.
 #'   Non-semver values (e.g. "dev") also trigger dev cohort table routing via
 #'   \code{createExecutionSettingsFromConfig()}.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied, its pipeline version and result-path rules are used.
 #' @param override Logical. If TRUE, skips the user confirmation prompt and proceeds
 #'   directly with cohort generation. Defaults to FALSE.
 #' @return Invisibly returns the cohort counts data frame (id, label, tags, 
 #'   cohort_entries, cohort_subjects). Also saves counts to cohortCounts.csv in the 
 #'   output folder.
 #' @export
-generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE) {
+generateCohorts <- function(executionSettings, pipelineVersion,
+                            executionContext = NULL, override = FALSE) {
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
   
   # Check if cohortManifest exists
   cohortsFolderPath <- here::here("inputs/cohorts")
@@ -299,20 +256,33 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
     stop("No cohorts found in manifest. Please add cohorts before generating.")
   }
   
-  # Display the cohorts that will be generated
+  # Display the cohorts that will be generated. This listing covers every
+  # registered cohort, including ones marked 'stale' — those are exactly the
+  # cohorts that need regenerating, so hiding them here would be backwards.
+  staleCount <- sum(cmSummary$status == "stale", na.rm = TRUE)
+
   cli::cli_rule("Cohorts to Generate")
   cli::cli_alert_info("Found {nrow(cmSummary)} cohort(s) in manifest")
-  
+  if (staleCount > 0) {
+    cli::cli_alert_warning(
+      "{staleCount} cohort(s) are marked stale and will be regenerated (flagged below)."
+    )
+  }
+
   # Format and display the cohorts
   for (i in seq_len(nrow(cmSummary))) {
     row <- cmSummary[i, ]
     cohort_id <- row$id
     cohort_label <- row$label
     cohort_tags <- row$tags
-    
+
     # Display basic info
-    cli::cli_alert_success("Cohort {cohort_id}: {cohort_label}")
-    
+    if (identical(row$status, "stale")) {
+      cli::cli_alert_warning("Cohort {cohort_id}: {cohort_label} [stale - will regenerate]")
+    } else {
+      cli::cli_alert_success("Cohort {cohort_id}: {cohort_label}")
+    }
+
     # Display tags if available
     if (!is.na(cohort_tags) && cohort_tags != "" && cohort_tags != "NULL") {
       cli::cli_bullets(c(i = "Tags: {cohort_tags}"))
@@ -329,8 +299,8 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
     if (!(response %in% c("yes", "y"))) {
       cli::cli_alert_info("Cohort generation cancelled by user.")
       cli::cli_bullets(c(
-        i = "To modify cohorts, edit cohortsLoad.csv in Excel and re-run",
-        i = "To import new cohorts from ATLAS, use {.code importAtlasCohorts()}"
+        i = "Update cohort definitions through the builder scripts or manifest methods.",
+        i = "Re-run the pipeline after making the changes."
       ))
       return(invisible(NULL))
     }
@@ -340,26 +310,19 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
   cli::cli_alert_info("Starting cohort generation...")
   
   tryCatch({
-    cm$createAllCohortTables()
-    cm$executeCohortGeneration()
+    cm$executeCohortGeneration(confirm = FALSE)
     counts <- cm$retrieveCohortCounts()
     
     cli::cli_alert_success("Cohort generation completed successfully!")
-    cli::cli_rule("Cohort Counts")
-    print(counts)
-    cli::cli_rule()
     
     # Save cohort counts to output folder
-    databaseName <- executionSettings$databaseName
-    dbNameSnake <- snakecase::to_snake_case(databaseName)
-    
-    outputFolder <- fs::path(
-      here::here("exec/results"),
-      dbNameSnake,
-      pipelineVersion,
-      "00_buildCohorts"
+    outputFolder <- resolveResultsPath(
+      executionSettings = executionSettings,
+      pipelineVersion = pipelineVersion,
+      taskName = "00_buildCohorts",
+      executionContext = executionContext
     )
-    
+
     # Create output folder if it doesn't exist
     if (!dir.exists(outputFolder)) {
       dir.create(outputFolder, recursive = TRUE, showWarnings = FALSE)
@@ -369,6 +332,12 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
     # Save cohort counts to CSV
     outputFile <- fs::path(outputFolder, "cohortCounts.csv")
     readr::write_csv(counts, file = outputFile)
+
+    nonzero_count <- sum(counts$cohort_entries > 0, na.rm = TRUE)
+    zero_count <- sum(counts$cohort_entries == 0, na.rm = TRUE)
+    cli::cli_alert_info(
+      "Cohort counts: {nrow(counts)} cohort(s) returned; {nonzero_count} with records; {zero_count} with zero records"
+    )
     cli::cli_alert_success("Saved cohort counts to: {fs::path_rel(outputFile)}")
     
     return(invisible(counts))
@@ -380,6 +349,35 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
 
 
 
+#' Append a milestone line to the pipeline log file (file only, never console).
+#' A no-op when \code{logFilePath} is NULL, so callers don't need to guard it.
+#' @keywords internal
+appendLogLine <- function(logFilePath, ...) {
+  if (is.null(logFilePath)) {
+    return(invisible(NULL))
+  }
+  cat(..., "\n", sep = "", file = logFilePath, append = TRUE)
+  invisible(NULL)
+}
+
+#' Format the full detail of a condition (message + call) for the log file.
+#' The console already gets the short version via cli; this is the durable copy.
+#' @keywords internal
+formatErrorDetail <- function(e) {
+  callTxt <- if (!is.null(conditionCall(e))) paste(deparse(conditionCall(e)), collapse = " ") else "<no call>"
+  paste(
+    c(
+      "----- Full error detail -----",
+      glue::glue("Class: {paste(class(e), collapse = ', ')}"),
+      glue::glue("Call: {callTxt}"),
+      "Message:",
+      conditionMessage(e),
+      "------------------------------"
+    ),
+    collapse = "\n"
+  )
+}
+
 #' @title Function to execute a study task in Ulysses
 #' @param taskFile the name of the taskFile. Only use the base name
 #' @param configBlock the name of the configBlock to use in the execution
@@ -389,11 +387,45 @@ generateCohorts <- function(executionSettings, pipelineVersion, override = FALSE
 #'  based on file changes, dependencies, cohort changes, and previous errors. Automatically builds execution settings from configBlock.
 #'  Default: FALSE
 #' @param env the execution environment
+#' @param codeState List or NULL. Working-tree provenance from
+#'   \code{runPreflightChecks()} (\code{sha} and \code{status}). Recorded in
+#'   \code{exec/logs/task_run_history.csv} alongside each run. NULL — the
+#'   default, used when a task is run outside the pipeline — records the code
+#'   state as \code{"unrecorded"} rather than implying a clean tree.
+#' @param logFilePath Character or NULL. Path to the pipeline log file for
+#'   recording high-level milestones and full error detail. NULL (default)
+#'   when run outside a pipeline (e.g. via \code{testStudyTask()}) — no file
+#'   is written.
+#' @param cohortManifestHash Character or NULL. Pre-computed cohort manifest
+#'   hash (see \code{.getCohortManifestHash()}). NULL (default) computes it once
+#'   here; \code{execute_pipeline()} computes it once and passes it in so the
+#'   manifest is not re-loaded for every task. Recorded with the run and used
+#'   for the rerun check.
+#' @param executionContext An optional `ExecutionContext` for the current run.
+#'   When supplied it owns namespace derivation (cohort-table suffix, results
+#'   folder) and `pipelineVersion` is taken from it.
 #' @keywords internal
 execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
                          checkStatus = FALSE,
                          env = rlang::caller_env(),
-                         cohortTableSuffix = NULL) {
+                         codeState = NULL,
+                         logFilePath = NULL,
+                         cohortManifestHash = NULL,
+                         executionContext = NULL) {
+
+  checkmate::assert_class(executionContext, "ExecutionContext", null.ok = TRUE)
+  if (!is.null(executionContext)) {
+    pipelineVersion <- executionContext$getPipelineVersion()
+  }
+
+  commitSha <- codeState$sha %||% NA_character_
+  codeStateLabel <- codeState$status %||% "unrecorded"
+
+  # Snapshot the cohort manifest once so the rerun check and every
+  # recordTaskExecution() call below agree on the same value.
+  if (is.null(cohortManifestHash)) {
+    cohortManifestHash <- .getCohortManifestHash()
+  }
 
   cli::cat_rule(glue::glue_col("Run Task: {yellow {taskFile}}"))
   cli::cat_bullet(
@@ -410,18 +442,22 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
   if (!file.exists(fullTaskFilePath)) {
     cli::cli_alert_danger("Task file not found: {fs::path_rel(fullTaskFilePath)}")
     recordTaskExecution(taskFile, configBlock, pipelineVersion, "failed",
-                        errorMessage = "Task file does not exist")
+                        errorMessage = "Task file does not exist",
+                        commitSha = commitSha, codeState = codeStateLabel,
+                        cohortManifestHash = cohortManifestHash)
     stop("Task file does not exist")
   }
 
   # Check task status if requested
   if (checkStatus) {
-    # Build execution settings from configBlock
+    # Build execution settings from configBlock. When an ExecutionContext is
+    # supplied it owns namespace derivation; otherwise the non-semver
+    # pipelineVersion is used as the test cohort-table suffix.
     tryCatch({
       executionSettings <- createExecutionSettingsFromConfig(
         configBlock = configBlock,
         pipelineVersion = pipelineVersion,
-        cohortTableSuffix = cohortTableSuffix
+        executionContext = executionContext
       )
     }, error = function(e) {
       cli::cli_alert_warning("Could not create execution settings for task status check: {e$message}")
@@ -433,12 +469,15 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
         taskFile = fullTaskFilePath,
         configBlock = configBlock,
         executionSettings = executionSettings,
-        pipelineVersion = pipelineVersion
+        pipelineVersion = pipelineVersion,
+        cohortManifestHash = cohortManifestHash
       )
 
       if (!statusCheck$should_rerun) {
         cli::cli_alert_success("Task is up to date - skipping execution")
-        recordTaskExecution(taskFile, configBlock, pipelineVersion, "skipped")
+        recordTaskExecution(taskFile, configBlock, pipelineVersion, "skipped",
+                            commitSha = commitSha, codeState = codeStateLabel,
+                            cohortManifestHash = cohortManifestHash)
         return(invisible(NULL))
       }
     }
@@ -450,7 +489,9 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
   }, error = function(e) {
     cli::cli_alert_danger("Task validation failed: {e$message}")
     recordTaskExecution(taskFile, configBlock, pipelineVersion, "failed",
-                        errorMessage = paste("Validation failed:", e$message))
+                        errorMessage = paste("Validation failed:", e$message),
+                        commitSha = commitSha, codeState = codeStateLabel,
+                        cohortManifestHash = cohortManifestHash)
     stop("Invalid task structure - cannot execute")
   })
 
@@ -463,7 +504,9 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
   }, error = function(e) {
     cli::cli_alert_danger("Failed to read task file: {e$message}")
     recordTaskExecution(taskFile, configBlock, pipelineVersion, "failed",
-                        errorMessage = paste("Read error:", e$message))
+                        errorMessage = paste("Read error:", e$message),
+                        commitSha = commitSha, codeState = codeStateLabel,
+                        cohortManifestHash = cohortManifestHash)
     stop("Error reading task file")
   })
 
@@ -473,7 +516,9 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
   }, error = function(e) {
     cli::cli_alert_danger("Failed to parse task file: {e$message}")
     recordTaskExecution(taskFile, configBlock, pipelineVersion, "failed",
-                        errorMessage = paste("Parse error:", e$message))
+                        errorMessage = paste("Parse error:", e$message),
+                        commitSha = commitSha, codeState = codeStateLabel,
+                        cohortManifestHash = cohortManifestHash)
     stop("Error parsing task expressions")
   })
 
@@ -485,9 +530,12 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
       res <- eval(exprs[[ex]], env)
     }, error = function(e) {
       cli::cli_alert_danger("Error executing expression {ex} in task {taskFile}:")
-      cli::cli_alert_danger("{e$message}")
-      executionError <<- paste("Expression", ex, "failed:", e$message)
-      stop(glue::glue("Task execution failed at expression {ex}"))
+      cli::cli_alert_danger("{conditionMessage(e)}")
+      executionError <<- glue::glue("Expression {ex} failed: {conditionMessage(e)}")
+      appendLogLine(logFilePath, glue::glue("[{format(Sys.time(), '%H:%M:%S')}] Task {taskFile} failed at expression {ex}"))
+      appendLogLine(logFilePath, formatErrorDetail(e))
+      # Do not stop() here — let the loop exit via executionError below so
+      # recordTaskExecution() still runs with the full detailed message.
     })
     if (!is.null(executionError)) {
       break
@@ -497,10 +545,14 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
   # Record success or failure
   if (!is.null(executionError)) {
     recordTaskExecution(taskFile, configBlock, pipelineVersion, "failed",
-                        errorMessage = executionError)
-    stop(executionError)
+                        errorMessage = executionError,
+                        commitSha = commitSha, codeState = codeStateLabel,
+                        cohortManifestHash = cohortManifestHash)
+    stop(executionError, call. = FALSE)
   } else {
-    recordTaskExecution(taskFile, configBlock, pipelineVersion, "success")
+    recordTaskExecution(taskFile, configBlock, pipelineVersion, "success",
+                        commitSha = commitSha, codeState = codeStateLabel,
+                        cohortManifestHash = cohortManifestHash)
     cli::cli_alert_success("Task {taskFile} completed successfully")
   }
 
@@ -508,11 +560,17 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 }
 
 #' @title Test a Single Study Task
-#' @description Executes a single task in test mode using the "dev" pipeline version.
-#'   Checks that you're not on main branch, then runs the task with checkStatus = TRUE.
-#'   Useful for testing individual task changes before running full pipeline.
+#' @description Executes a single task in test mode using the supplied
+#'   \code{pipelineVersion} as its test namespace. Checks that you are not on the
+#'   main branch, then runs the task with \code{checkStatus = TRUE}. Useful for
+#'   testing individual task changes before running the full pipeline.
 #' @param taskFile Character. The name of the task file (base name only, no path).
 #' @param configBlock Character. The name of the config block to use.
+#' @param pipelineVersion Character. Test namespace for this run — drives the
+#'   cohort table suffix, the \code{exec/results/} folder, and the task-history
+#'   namespace. Defaults to \code{"dev"}. Normalized to lowercase snake_case; an
+#'   over-long namespace is rejected rather than truncated. Use the same value
+#'   here and in \code{testStudyPipeline()}.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns the task result
 #' @export
@@ -521,10 +579,18 @@ execute_task <- function(taskFile, configBlock, pipelineVersion = "dev",
 #' # Test a task on develop branch
 #' testStudyTask("01_generate_cohorts.R", configBlock = "myConfig")
 #' }
-testStudyTask <- function(taskFile, configBlock, env = rlang::caller_env()) {
+testStudyTask <- function(
+  taskFile, 
+  configBlock, 
+  pipelineVersion = "dev",
+  env = rlang::caller_env()
+) {
   checkmate::assert_string(taskFile, min.chars = 1)
   checkmate::assert_string(configBlock, min.chars = 1)
-  
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
+
+  pipelineVersion <- normalizePipelineVersion(pipelineVersion)
+
   # Check branch
   branch <- get_current_branch()
   if (branch == "main") {
@@ -536,37 +602,15 @@ testStudyTask <- function(taskFile, configBlock, env = rlang::caller_env()) {
   
   cli::cli_rule("TEST Mode: Study Task")
   cli::cli_alert_warning("Testing on branch: {branch}")
-  cli::cli_alert_info("Using DEV version for test run")
+  cli::cli_alert_info("Using test pipeline version: {pipelineVersion}")
   
   execute_task(
     taskFile = taskFile,
     configBlock = configBlock,
-    pipelineVersion = "dev",
+    pipelineVersion = pipelineVersion,
     checkStatus = TRUE,
     env = env
   )
-}
-
-#' @keywords internal
-normalizeTestNamespaceLabel <- function(label, maxChars = 24) {
-  checkmate::assert_string(label, min.chars = 1)
-  checkmate::assert_int(maxChars, lower = 1)
-
-  normalized <- tolower(trimws(label))
-  normalized <- gsub("[^a-z0-9]+", "_", normalized)
-  normalized <- gsub("^_+|_+$", "", normalized)
-  normalized <- gsub("_+", "_", normalized)
-
-  if (normalized == "") {
-    stop("test label must contain at least one letter or number")
-  }
-
-  if (nchar(normalized) > maxChars) {
-    normalized <- substr(normalized, 1, maxChars)
-    cli::cli_alert_warning("Test label truncated to {maxChars} characters: {normalized}")
-  }
-
-  normalized
 }
 
 #' @title Core Pipeline Execution Logic
@@ -575,37 +619,39 @@ normalizeTestNamespaceLabel <- function(label, maxChars = 24) {
 #' @param configBlock name of one or multiple configBlock to use in the execution
 #' @param updateType the type of version increment: 'major', 'minor', or 'patch'. 
 #'   Only used when testMode = FALSE.
-#' @param testMode Logical. If TRUE, skips all validations and uses "dev" version.
-#'   If FALSE, enforces code validation and version management. Default: FALSE
+#' @param testMode Logical. If TRUE, uses test namespace/version handling and
+#'   skips production version management. Public test entry points still apply
+#'   the main-branch guard. If FALSE, enforces production version management.
+#'   Default: FALSE
 #' @param skipRenv Logical. If TRUE, skips renv validation. Default: FALSE
 #' @param skipConnectivityCheck Logical. If TRUE (default), skips the optional
 #'   database connectivity pre-flight check. Set to FALSE to attempt a test
 #'   connection to each config block before execution begins.
+#' @param ignoreUncommittedPaths Character vector or NULL. Repo-relative paths
+#'   whose uncommitted changes do not fail the code-state check. NULL (default)
+#'   reads the list from config.yml, which itself defaults to ignoring nothing.
+#' @param skipCodeStateCheck Logical. If TRUE, skips the code-state check
+#'   entirely. Default: FALSE
 #' @param env the execution environment
-#' @param pipelineVersionOverride Character. Optional test-mode override for
-#'   the pipeline version folder label.
-#' @param cohortTableSuffix Character. Optional test-mode suffix used for
-#'   cohort table names.
+#' @param pipelineVersionOverride Character. Optional test-mode override for the
+#'   pipeline version (the test namespace). Drives the cohort-table suffix, the
+#'   results folder, and the task-history namespace via the run's
+#'   `ExecutionContext`.
 #' @return Invisibly returns task results list
 #' @keywords internal
 execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
                              skipRenv = FALSE, skipConnectivityCheck = TRUE,
+                             ignoreUncommittedPaths = NULL,
+                             skipCodeStateCheck = FALSE,
                              env = rlang::caller_env(),
-                             pipelineVersionOverride = NULL,
-                             cohortTableSuffix = NULL) {
+                             pipelineVersionOverride = NULL) {
   
   # Compute prospective pipeline version (needed for pre-flight checks)
   if (testMode) {
     if (is.null(pipelineVersionOverride)) {
       pipelineVersion <- "dev"
     } else {
-      pipelineVersion <- normalizeTestNamespaceLabel(pipelineVersionOverride)
-    }
-
-    if (is.null(cohortTableSuffix)) {
-      cohortTableSuffixResolved <- normalizeTestNamespaceLabel(pipelineVersion)
-    } else {
-      cohortTableSuffixResolved <- normalizeTestNamespaceLabel(cohortTableSuffix)
+      pipelineVersion <- normalizePipelineVersion(pipelineVersionOverride)
     }
 
     currentVersion <- NULL
@@ -614,12 +660,6 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     if (!is.null(pipelineVersionOverride)) {
       cli::cli_abort("pipelineVersionOverride is only supported when testMode = TRUE")
     }
-
-    if (!is.null(cohortTableSuffix)) {
-      cli::cli_abort("cohortTableSuffix is only supported when testMode = TRUE")
-    }
-
-    cohortTableSuffixResolved <- NULL
 
     # Validate updateType
     updateType <- tolower(trimws(updateType))
@@ -661,6 +701,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     pipelineVersion <- paste0(versionParts, collapse = ".")
   }
 
+  executionContext <- newExecutionContext(
+    pipelineVersion,
+    testMode = testMode,
+    execPath = here::here("exec/results")
+  )
+  pipelineVersion <- executionContext$getPipelineVersion()
+
   # Run all pre-flight checks — consolidated banner before any execution
   preFlightResult <- runPreflightChecks(
     configBlock = configBlock,
@@ -668,12 +715,15 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     testMode = testMode,
     skipRenv = skipRenv,
     skipConnectivityCheck = skipConnectivityCheck,
+    ignoreUncommittedPaths = ignoreUncommittedPaths,
+    skipCodeStateCheck = skipCodeStateCheck,
     resultsPath = here::here("exec/results"),
     tasksFolderPath = here::here("analysis/tasks")
   )
 
   lockfileHash <- preFlightResult$lockfileHash
   taskFilesToRun <- preFlightResult$taskFilesToRun
+  codeState <- preFlightResult$codeState
 
   if (length(taskFilesToRun) == 0) {
     cli::cli_alert_warning("No task files found in analysis/tasks folder")
@@ -695,14 +745,13 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     })
   }
   
-  # Create execution settings from first configBlock.
-  # Forwarding pipelineVersion so that dev versions (non-semver) automatically
-  # route cohort generation to the _dev table, leaving the production table untouched.
+  # Create execution settings from first configBlock. The ExecutionContext owns
+  # namespace derivation (cohort-table suffix, results folder, task history).
   tryCatch({
     executionSettings <- createExecutionSettingsFromConfig(
       configBlock = configBlock[1],
       pipelineVersion = pipelineVersion,
-      cohortTableSuffix = cohortTableSuffixResolved
+      executionContext = executionContext
     )
     cli::cli_alert_success("Execution settings created for config: {configBlock[1]}")
   }, error = function(e) {
@@ -736,19 +785,24 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
       glue::glue("Update Type: {updateType}"),
       glue::glue("Tasks: {length(taskFilesToRun)}"),
       glue::glue("Test Mode: {testMode}"),
+      glue::glue("Code State: {codeState$status %||% 'unrecorded'}"),
+      glue::glue("Commit SHA: {codeState$sha %||% 'unrecorded'}"),
+      if (length(codeState$ignoredFiles %||% character(0)) > 0) {
+        glue::glue(
+          "Uncommitted Files Ignored ({length(codeState$ignoredFiles)}): ",
+          "{paste(codeState$ignoredFiles, collapse = ', ')}"
+        )
+      },
       "================================================================================",
       ""
     )
     
     writeLines(logHeader, con = logFilePath)
-    
-    # Setup sink for logging to capture all output
-    sink(file = logFilePath, append = TRUE, type = "output")
-    on.exit(sink(), add = TRUE)
-    
-    # Log to file that we're starting cohort generation
-    cat(glue::glue("[{format(Sys.time(), '%H:%M:%S')}] Starting cohort generation...\n"), sep = "")
-    
+
+    # Log to file that we're starting cohort generation (file only — console
+    # already gets this via cli below, streamed live and not redirected)
+    appendLogLine(logFilePath, glue::glue("[{format(Sys.time(), '%H:%M:%S')}] Starting cohort generation..."))
+
   }, error = function(e) {
     cli::cli_alert_warning("Failed to setup logging: {e$message}")
   })
@@ -763,30 +817,33 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
     generateCohorts(
       executionSettings = executionSettings,
       pipelineVersion = pipelineVersion,
+      executionContext = executionContext,
       override = TRUE
     )
   }, error = function(e) {
     cli::cli_alert_danger("Cohort generation failed: {e$message}")
     stop("Pipeline cannot proceed without cohorts")
   })
-  
+
+  # Snapshot the cohort manifest once, after generation has reconciled it, and
+  # reuse it for every task's rerun check / run record below.
+  cohortManifestHash <- .getCohortManifestHash()
+
   # Run all tasks across all config blocks
   cli::cli_rule("Running Pipeline Tasks")
   taskResults <- list()
   
   for (db in seq_along(configBlock)) {
-    logMsg <- glue::glue("\n[{format(Sys.time(), '%H:%M:%S')}] Processing config block: {configBlock[db]}")
-    cat(logMsg, "\n", sep = "")
-    
+    appendLogLine(logFilePath, glue::glue("[{format(Sys.time(), '%H:%M:%S')}] Processing config block: {configBlock[db]}"))
+
     cli::cli_alert_info("Processing config block: {configBlock[db]}")
-    
+
     for (task in seq_along(taskFilesToRun)) {
       taskName <- taskFilesToRun[task]
       taskKey <- glue::glue("{configBlock[db]}_{taskName}")
-      
-      taskLogMsg <- glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] Executing task {task}/{length(taskFilesToRun)}: {taskName}")
-      cat(taskLogMsg, "\n", sep = "")
-      
+
+      appendLogLine(logFilePath, glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] Executing task {task}/{length(taskFilesToRun)}: {taskName}"))
+
       tryCatch({
         cli::cli_alert_info("Executing task {task}/{length(taskFilesToRun)}: {taskName}")
         
@@ -794,13 +851,15 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
           taskFile = taskName,
           configBlock = configBlock[db],
           pipelineVersion = pipelineVersion,
-          cohortTableSuffix = cohortTableSuffixResolved,
           checkStatus = TRUE,
-          env = env
+          env = env,
+          codeState = codeState,
+          logFilePath = logFilePath,
+          cohortManifestHash = cohortManifestHash,
+          executionContext = executionContext
         )
         
-        successMsg <- glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] ✓ Task completed successfully")
-        cat(successMsg, "\n", sep = "")
+        appendLogLine(logFilePath, glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] ✓ Task completed successfully"))
         
         taskResults[[taskKey]] <- list(
           status = "success",
@@ -809,22 +868,17 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
         )
         
       }, error = function(e) {
-        errorMsg <- glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] ✗ Task failed with error: {e$message}")
-        cat(errorMsg, "\n", sep = "")
+        appendLogLine(logFilePath, glue::glue("  [{format(Sys.time(), '%H:%M:%S')}] ✗ Task failed: {taskName}"))
+        appendLogLine(logFilePath, formatErrorDetail(e))
         
         cli::cli_alert_danger("Task failed: {taskName}")
-        cli::cli_alert_danger("Error: {e$message}")
+        cli::cli_alert_danger("Error: {conditionMessage(e)}")
         
-        stop(glue::glue("Pipeline halted at task: {taskName}"))
+        stop(glue::glue("Pipeline halted at task: {taskName}: {conditionMessage(e)}"), call. = FALSE)
       })
     }
   }
-  
-  # Close sink before summary
-  if (!is.null(logFilePath)) {
-    sink()
-  }
-  
+
   # Summary
   cli::cli_rule("Pipeline Execution Complete")
   successCount <- sum(sapply(taskResults, function(x) x$status == "success"))
@@ -852,6 +906,7 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
       glue::glue("Total Tasks: {length(taskResults)}"),
       glue::glue("Log File: {fs::path_rel(logFilePath)}"),
       glue::glue("Test Mode: {testMode}"),
+      glue::glue("Code State: {codeState$status %||% 'unrecorded'}"),
       "================================================================================",
       ""
     )
@@ -864,13 +919,15 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 }
 
 #' @title Test Study Pipeline
-#' @description Executes the full study pipeline in test mode using the "dev" pipeline version.
-#'   Skips all git validation, renv checks, and version management. Useful for iterative 
-#'   testing during development.
+#' @description Executes the full study pipeline in test mode. The
+#'   pipelineVersion value is interpreted as the test namespace and is
+#'   used for test cohort tables and output folders. Test runs are allowed on
+#'   development branches but rejected on the main branch.
 #' @param configBlock Character or character vector. Name(s) of config block(s) to use.
-#' @param testLabel Character. Label used for test output folder and cohort table suffix.
-#'   Defaults to \code{"dev"}. Label is normalized to lowercase snake_case and
-#'   truncated to 24 characters.
+#' @param pipelineVersion Character. Test namespace used for output folders and
+#'   cohort table suffix. Defaults to \code{"dev"}. The value is normalized to
+#'   lowercase snake_case; an over-long namespace is rejected rather than
+#'   truncated.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns task results list
 #' @export
@@ -879,14 +936,14 @@ execute_pipeline <- function(configBlock, updateType = NULL, testMode = FALSE,
 #' # Test full pipeline on develop branch
 #' testStudyPipeline(configBlock = "myConfig")
 #' # Test full pipeline with a custom namespace
-#' testStudyPipeline(configBlock = "myConfig", testLabel = "feature_ml_test")
+#' testStudyPipeline(configBlock = "myConfig", pipelineVersion = "feature_ml_test")
 #' }
-testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::caller_env()) {
+testStudyPipeline <- function(configBlock, pipelineVersion = "dev", env = rlang::caller_env()) {
   checkmate::assert_character(configBlock, min.len = 1, any.missing = FALSE)
-  checkmate::assert_string(testLabel, min.chars = 1)
+  checkmate::assert_string(pipelineVersion, min.chars = 1)
 
-  testLabel <- normalizeTestNamespaceLabel(testLabel)
-  
+  pipelineVersion <- normalizePipelineVersion(pipelineVersion)
+
   # Check branch
   branch <- get_current_branch()
   if (branch == "main") {
@@ -898,13 +955,12 @@ testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::calle
   
   cli::cli_rule("TEST Mode: Study Pipeline")
   cli::cli_alert_warning("Testing on branch: {branch}")
-  cli::cli_alert_info("Using test label: {testLabel}")
+  cli::cli_alert_info("Using test pipeline version: {pipelineVersion}")
   
   execute_pipeline(
     configBlock = configBlock,
     testMode = TRUE,
-    pipelineVersionOverride = testLabel,
-    cohortTableSuffix = testLabel,
+    pipelineVersionOverride = pipelineVersion,
     skipRenv = TRUE,
     env = env
   )
@@ -924,6 +980,19 @@ testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::calle
 #' @param skipConnectivityCheck Logical. If TRUE (default), skips the optional
 #'   database connectivity pre-flight check. Set to FALSE to attempt a test
 #'   connection to each config block before execution begins.
+#' @param ignoreUncommittedPaths Character vector or NULL. Repo-relative paths
+#'   (e.g. `"inputs"`) whose uncommitted changes should not fail the code-state
+#'   pre-flight check. Changes anywhere else — notably `analysis/` — still fail
+#'   it. When NULL (default) the list is read from `ignoreUncommittedPaths` in
+#'   the `default:` block of config.yml, which itself defaults to ignoring
+#'   nothing, so behaviour is unchanged unless a study opts in. Pass
+#'   `character(0)` to force strict checking regardless of config.yml.
+#' @param skipCodeStateCheck Logical. If TRUE, skips the code-state check
+#'   entirely — a last resort when `ignoreUncommittedPaths` cannot express the
+#'   churn. The run proceeds, but the pre-flight checklist raises a warning and
+#'   the run history records the tree as `"unverified-skipped"`. Defaults to
+#'   FALSE. Deliberately not settable from config.yml, so it cannot be baked
+#'   permanently into a study.
 #' @param env The execution environment. Defaults to caller environment.
 #' @return Invisibly returns task results list
 #' @export
@@ -931,13 +1000,32 @@ testStudyPipeline <- function(configBlock, testLabel = "dev", env = rlang::calle
 #' \dontrun{
 #' # Run production pipeline with patch version increment
 #' execStudyPipeline(configBlock = "myConfig", updateType = "patch")
+#'
+#' # Tolerate manifest/ATLAS churn under inputs/ for this run only
+#' execStudyPipeline(
+#'   configBlock = "myConfig",
+#'   updateType = "patch",
+#'   ignoreUncommittedPaths = "inputs"
+#' )
+#'
+#' # Last resort: do not check the working tree at all
+#' execStudyPipeline(
+#'   configBlock = "myConfig",
+#'   updateType = "patch",
+#'   skipCodeStateCheck = TRUE
+#' )
 #' }
 execStudyPipeline <- function(configBlock, updateType, skipRenv = FALSE,
-                              skipConnectivityCheck = TRUE, env = rlang::caller_env()) {
+                              skipConnectivityCheck = TRUE,
+                              ignoreUncommittedPaths = NULL,
+                              skipCodeStateCheck = FALSE,
+                              env = rlang::caller_env()) {
   checkmate::assert_character(configBlock, min.len = 1, any.missing = FALSE)
   checkmate::assert_string(updateType, min.chars = 1)
   checkmate::assert_logical(skipRenv, len = 1)
   checkmate::assert_logical(skipConnectivityCheck, len = 1)
+  checkmate::assert_character(ignoreUncommittedPaths, any.missing = FALSE, null.ok = TRUE)
+  checkmate::assert_logical(skipCodeStateCheck, len = 1, any.missing = FALSE)
   
   # Check current branch
   branch <- get_current_branch()
@@ -1026,6 +1114,8 @@ execStudyPipeline <- function(configBlock, updateType, skipRenv = FALSE,
     testMode = FALSE,
     skipRenv = skipRenv,
     skipConnectivityCheck = skipConnectivityCheck,
+    ignoreUncommittedPaths = ignoreUncommittedPaths,
+    skipCodeStateCheck = skipCodeStateCheck,
     env = env
   )
   
@@ -1055,24 +1145,15 @@ execStudyPipeline <- function(configBlock, updateType, skipRenv = FALSE,
 }
 
 
-addMainFile <- function(repoName, repoFolder, toolType, configBlocks, studyName) {
+addMainFile <- function(repoName, repoFolder, configBlocks, studyName) {
   repoPath <- fs::path(repoFolder, repoName) |>
     fs::path_expand()
 
-  if (toolType == "dbms") {
-    configBlocks <- paste0(configBlocks, collapse = "\", \"")
+  configBlocks <- paste0(configBlocks, collapse = "\", \"")
 
-    mainR <- fs::path_package("picard", "templates/main.R") |>
-      readr::read_file() |>
-      glue::glue()
-
-  }
-
-  if (toolType == "external") {
-    mainR <- fs::path_package("picard", "templates/main_simple.R") |>
-      readr::read_file() |>
-      glue::glue()
-  }
+  mainR <- fs::path_package("picard", "templates/main.R") |>
+    readr::read_file() |>
+    glue::glue()
 
   actionItem(glue::glue_col("Initialize Main Exec File: {green {fs::path(repoPath, 'main.R')}}"))
   readr::write_file(
@@ -1088,25 +1169,20 @@ addMainFile <- function(repoName, repoFolder, toolType, configBlocks, studyName)
 #'   This provides a testing variant of the production pipeline that uses testStudyPipeline().
 #' @param repoName Character. Name of the repository.
 #' @param repoFolder Character. Parent directory of the repository.
-#' @param toolType Character. Tool type, either "dbms" or "external".
 #' @param configBlocks List or Character vector. Database config blocks or block names.
 #' @param studyName Character. Name of the study.
 #' @keywords internal
-addTestMainFile <- function(repoName, repoFolder, toolType, configBlocks, studyName) {
+addTestMainFile <- function(repoName, repoFolder, configBlocks, studyName) {
   repoPath <- fs::path(repoFolder, repoName) |>
     fs::path_expand()
   
   extrasPath <- fs::path(repoPath, "extras")
   
-  if (toolType == "dbms") {
-    # Extract config block names if objects are passed
-    if (!is.character(configBlocks)) {
-      configBlocks <- purrr::map_chr(configBlocks, ~.x$configBlockName)
-    }
-    configBlocks <- paste0(configBlocks, collapse = "\", \"")
-  } else {
-    configBlocks <- ""
+  # Extract config block names if objects are passed
+  if (!is.character(configBlocks)) {
+    configBlocks <- purrr::map_chr(configBlocks, ~.x$configBlockName)
   }
+  configBlocks <- paste0(configBlocks, collapse = "\", \"")
   
   # Create extras directory
   fs::dir_create(extrasPath)
@@ -1338,6 +1414,127 @@ sourceInputBuilderScripts <- function(
   invisible(ll)
 }
 
+#' Detect the pipeline version recorded in a study's config.yml
+#'
+#' @param projectPath Character. Path to the project root directory.
+#' @return Character scalar with the version, or NULL when it cannot be found.
+#' @noRd
+detect_pipeline_version <- function(projectPath) {
+  configFilePath <- fs::path(projectPath, "config.yml")
+
+  if (!fs::file_exists(configFilePath)) {
+    return(NULL)
+  }
+
+  version <- tryCatch(
+    config::get("version", file = configFilePath),
+    error = function(e) NULL
+  )
+
+  if (is.null(version) || length(version) == 0) {
+    return(NULL)
+  }
+
+  as.character(version)[1]
+}
+
+#' Create a Dissemination Environment Object
+#'
+#' @description
+#' Builds the \code{disseminationEnv} object that dissemination scripts in
+#' \code{dissemination/pretty/R/} rely on. \code{\link{sourceDisseminationScripts}}
+#' creates this object automatically before sourcing those scripts, but while
+#' authoring a script you often want the same metadata at the console so the
+#' code can be tested line by line. Call this function to build it standalone.
+#'
+#' @param projectPath Character. Path to the project root directory.
+#'   Defaults to \code{here::here()}.
+#' @param pipelineVersion Character. The pipeline/study version being disseminated
+#'   (e.g., "1.0.0"). If NULL (default), attempts to auto-detect from config.yml.
+#' @param databaseIds Character vector. Database IDs that were included in
+#'   postprocessing (e.g., c("database_1", "database_2")). If NULL (default), the
+#'   corresponding element is NULL and can be set manually by the user.
+#' @param outputPath Character. Base output directory for dissemination scripts.
+#'   Defaults to \code{here::here("dissemination/pretty")}.
+#' @param verbose Logical. If TRUE (default), reports the metadata that was built.
+#'
+#' @return A list with elements:
+#'   \itemize{
+#'     \item \code{pipelineVersion}: The version string (or NULL when unknown)
+#'     \item \code{databaseIds}: Vector of database IDs (or NULL)
+#'     \item \code{outputPath}: Base output directory for results
+#'     \item \code{resultsPath}: Merged results path for the version
+#'       (\code{dissemination/export/merge/v{version}}), or \code{NA_character_}
+#'       when the version is unknown
+#'   }
+#'
+#' @details
+#' Use this while developing a dissemination script:
+#' assign the result to a variable named \code{disseminationEnv} in the global
+#' environment so the script body behaves exactly as it will when
+#' \code{\link{sourceDisseminationScripts}} runs it.
+#'
+#' @examples
+#' \dontrun{
+#' # Build the object interactively while writing a dissemination script
+#' disseminationEnv <- createDisseminationEnv(
+#'   pipelineVersion = "1.0.0",
+#'   databaseIds = c("database_1", "database_2")
+#' )
+#'
+#' # Now the script code can be run line by line
+#' results <- readr::read_csv(
+#'   fs::path(disseminationEnv$resultsPath, "cohort_counts.csv")
+#' )
+#' }
+#'
+#' @export
+createDisseminationEnv <- function(
+    projectPath = here::here(),
+    pipelineVersion = NULL,
+    databaseIds = NULL,
+    outputPath = here::here("dissemination/pretty"),
+    verbose = TRUE) {
+
+  checkmate::assert_string(projectPath)
+  checkmate::assert_string(pipelineVersion, null.ok = TRUE)
+  checkmate::assert_character(
+    databaseIds,
+    min.len = 1, any.missing = FALSE, null.ok = TRUE
+  )
+  checkmate::assert_string(outputPath)
+  checkmate::assert_logical(verbose, len = 1, any.missing = FALSE)
+
+  if (is.null(pipelineVersion)) {
+    pipelineVersion <- detect_pipeline_version(projectPath)
+  }
+
+  disseminationEnv <- list(
+    pipelineVersion = pipelineVersion,
+    databaseIds = databaseIds,
+    outputPath = outputPath,
+    resultsPath = if (!is.null(pipelineVersion)) {
+      fs::path(projectPath, "dissemination/export/merge", paste0("v", pipelineVersion))
+    } else {
+      NA_character_
+    }
+  )
+
+  if (verbose) {
+    if (is.null(pipelineVersion)) {
+      cli::cli_alert_warning(
+        "No pipeline version found in {.file config.yml}; {.code resultsPath} is unavailable. Supply {.arg pipelineVersion} to set it."
+      )
+    } else {
+      cli::cli_alert_info(
+        "Dissemination metadata: pipelineVersion = {.val {pipelineVersion}}, resultsPath = {.file {disseminationEnv$resultsPath}}"
+      )
+    }
+  }
+
+  disseminationEnv
+}
+
 #' Source Dissemination Scripts
 #'
 #' A convenience function that sources all R scripts from the dissemination
@@ -1350,8 +1547,11 @@ sourceInputBuilderScripts <- function(
 #' Dissemination scripts are sourced from \code{dissemination/pretty/R/} in
 #' alphabetical order. Each script is sourced in the global environment, so
 #' any variables, functions, or file outputs are available at the console level.
-#' A \code{disseminationEnv} object is automatically created and injected into
-#' the global environment for use by dissemination scripts.
+#' A \code{disseminationEnv} object is automatically created (via
+#' \code{\link{createDisseminationEnv}}) and injected into the global
+#' environment for use by dissemination scripts. Call
+#' \code{\link{createDisseminationEnv}} directly to build the same object at the
+#' console while authoring a dissemination script.
 #'
 #' @param projectPath Character. Path to the project root directory.
 #'   Defaults to \code{here::here()}.
@@ -1408,26 +1608,14 @@ sourceDisseminationScripts <- function(
   directories_checked <- character(0)
   errors <- list()
 
-  # Auto-detect pipelineVersion from config if not provided
-  if (is.null(pipelineVersion)) {
-    tryCatch({
-      pipelineVersion <- config::get("version", file = fs::path(projectPath, "config.yml"))
-    }, error = function(e) {
-      # Version not found, will remain NULL
-    })
-  }
-
   # Create disseminationEnv object to inject into global environment
   # This allows dissemination scripts to access metadata without hardcoding
-  disseminationEnv <- list(
+  disseminationEnv <- createDisseminationEnv(
+    projectPath = projectPath,
     pipelineVersion = pipelineVersion,
     databaseIds = databaseIds,
     outputPath = outputPath,
-    resultsPath = if (!is.null(pipelineVersion)) {
-      fs::path(projectPath, "dissemination/export/merge", paste0("v", pipelineVersion))
-    } else {
-      NA_character_
-    }
+    verbose = FALSE
   )
 
   # Define dissemination scripts directory

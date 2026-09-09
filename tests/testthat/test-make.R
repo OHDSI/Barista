@@ -19,6 +19,34 @@ testthat::test_that("setContributor and makeStudyMeta create expected R6 objects
   testthat::expect_true(grepl("Example Contributor", study_meta$listContributors(), fixed = TRUE))
 })
 
+testthat::test_that("StudyMeta supports an optional study description", {
+  contributor <- setContributor(
+    name = "Example Contributor",
+    email = "contributor@example.org",
+    role = "developer"
+  )
+
+  described_meta <- makeStudyMeta(
+    studyTitle = "Described Study",
+    therapeuticArea = "Cardiology",
+    studyType = "Characterization",
+    contributors = list(contributor),
+    studyDescription = "A study description for the generated README."
+  )
+  default_meta <- makeStudyMeta(
+    studyTitle = "Default Description Study",
+    therapeuticArea = "Cardiology",
+    studyType = "Characterization",
+    contributors = list(contributor)
+  )
+
+  testthat::expect_equal(
+    described_meta$studyDescription,
+    "A study description for the generated README."
+  )
+  testthat::expect_null(default_meta$studyDescription)
+})
+
 testthat::test_that("makeBlock builds DbConfigBlock with sanitized placeholders", {
   db_block <- makeBlock(
     configBlockName = "db_placeholder",
@@ -229,6 +257,91 @@ testthat::test_that("makeTaskFile creates a numbered task script in analysis/tas
   testthat::expect_true(grepl("Create incidence summary output", task_text, fixed = TRUE))
 })
 
+testthat::test_that("setOutputFolder derives a version segment that matches the cohort-table suffix", {
+  es <- ExecutionSettings$new(
+    connectionDetails = DatabaseConnector::createConnectionDetails(
+      dbms = "sqlite",
+      server = ":memory:"
+    ),
+    cdmDatabaseSchema = "main",
+    workDatabaseSchema = "main",
+    cohortTable = "cohort_table",
+    databaseName = "My Database"
+  )
+
+  execPath <- fs::path(withr::local_tempdir(), "exec", "results")
+
+  # Non-semver namespace is normalized to lowercase snake_case, so the results
+  # folder segment matches the cohort-table suffix from
+  # createExecutionSettingsFromConfig() ("cohort_table_develop_ml").
+  test_folder <- setOutputFolder(
+    executionSettings = es,
+    pipelineVersion = "Develop ML",
+    taskName = "01_task",
+    execPath = execPath
+  )
+  testthat::expect_equal(
+    as.character(test_folder),
+    as.character(fs::path(execPath, "my_database", "develop_ml", "01_task"))
+  )
+  testthat::expect_true(fs::dir_exists(test_folder))
+
+  # Semantic versions pass through unchanged.
+  prod_folder <- setOutputFolder(
+    executionSettings = es,
+    pipelineVersion = "1.2.3",
+    taskName = "01_task",
+    execPath = execPath
+  )
+  testthat::expect_equal(
+    as.character(prod_folder),
+    as.character(fs::path(execPath, "my_database", "1.2.3", "01_task"))
+  )
+})
+
+testthat::test_that("isProductionPipelineVersion recognises the 'prod' sentinel and semver", {
+  testthat::expect_true(isProductionPipelineVersion("prod"))
+  testthat::expect_true(isProductionPipelineVersion("1.2.3"))
+  testthat::expect_true(isProductionPipelineVersion("0.0.0"))
+
+  testthat::expect_false(isProductionPipelineVersion("dev"))
+  testthat::expect_false(isProductionPipelineVersion("develop_ml"))
+  testthat::expect_false(isProductionPipelineVersion("production"))
+  testthat::expect_false(isProductionPipelineVersion("1.2"))
+  testthat::expect_false(isProductionPipelineVersion("v1.2.3"))
+})
+
+testthat::test_that("createExecutionSettingsFromConfig treats the default 'prod' as the production table", {
+  repo_ctx <- make_test_repo_for_file_creation("ces_prod_repo")
+  on.exit(fs::dir_delete(repo_ctx$root_dir), add = TRUE)
+  withr::local_dir(repo_ctx$repo_path)
+
+  home <- withr::local_tempdir()
+  fs::dir_create(fs::path(home, ".picard"))
+  readr::write_lines(
+    c("server_placeholder:", "  dbms: sqlite", paste0("  server: ", fs::path(home, "cdm.sqlite"))),
+    fs::path(home, ".picard", "secrets.yml")
+  )
+  withr::local_envvar(HOME = home)
+
+  ces <- function(...) {
+    suppressMessages(createExecutionSettingsFromConfig(
+      configBlock = "db_placeholder",
+      configFilePath = "config.yml",
+      ...
+    ))
+  }
+
+  # Default pipelineVersion ("prod") must NOT suffix the configured cohort table.
+  testthat::expect_equal(ces()$cohortTable, "cohort_table_placeholder")
+
+  # A test namespace still routes to a suffixed table.
+  testthat::expect_equal(ces(pipelineVersion = "dev")$cohortTable, "cohort_table_placeholder_dev")
+
+  # A semantic version is also left unchanged.
+  testthat::expect_equal(ces(pipelineVersion = "1.2.3")$cohortTable, "cohort_table_placeholder")
+})
+
 testthat::test_that("makeSrcFile creates a snake_case utility R file in analysis/src", {
   repo_ctx <- make_test_repo_for_file_creation("src_repo")
   on.exit(fs::dir_delete(repo_ctx$root_dir), add = TRUE)
@@ -339,7 +452,7 @@ testthat::test_that("makePrintFriendlyFile generates Rmd output from cohort JSON
   json_target_dir <- fs::path(repo_ctx$repo_path, "inputs/cohorts/json/target")
   fs::dir_create(json_target_dir, recurse = TRUE)
 
-  source_json <- fs::path("tests", "testthat", "test_files", "death.json")
+  source_json <- testthat::test_path("test_files", "death.json")
   testthat::expect_true(fs::file_exists(source_json))
   fs::file_copy(source_json, fs::path(json_target_dir, "death.json"), overwrite = TRUE)
 

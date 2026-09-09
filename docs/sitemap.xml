@@ -67,6 +67,12 @@
     <loc>https://ohdsi.github.io/Picard/reference/agentSaveWork.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/announce_code_state.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/appendLogLine.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/buildComplementCohort.html</loc>
   </url>
   <url>
@@ -97,6 +103,9 @@
     <loc>https://ohdsi.github.io/Picard/reference/clearPendingPR.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/code_state_check.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/CohortDef.html</loc>
   </url>
   <url>
@@ -119,6 +128,9 @@
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/createBlankConceptSetsLoadFile.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/createDisseminationEnv.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/createExecutionSettings.html</loc>
@@ -157,10 +169,16 @@
     <loc>https://ohdsi.github.io/Picard/reference/dot-createEmptyHistory.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/dot-ensureHistoryColumns.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/dot-getCohortManifestHash.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/dot-initializeTaskHistory.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/dot-readTaskHistory.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/editSecrets.html</loc>
@@ -181,13 +199,22 @@
     <loc>https://ohdsi.github.io/Picard/reference/execute_task.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/ExecutionContext.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/ExecutionSettings.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/expandManifestTags.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/findTransitiveDependents.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/formatErrorDetail.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/formatFloats.html</loc>
@@ -209,6 +236,9 @@
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/getEnvironmentHash.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/getIgnoreUncommittedPaths.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/getServerCredentials.html</loc>
@@ -242,6 +272,9 @@
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/initializeRenv.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/isProductionPipelineVersion.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/launchCohortsLoadEditor.html</loc>
@@ -286,10 +319,25 @@
     <loc>https://ohdsi.github.io/Picard/reference/makeUlyssesStudySettings.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/manifestValueUnchanged.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/migrateCohortManifest.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/migrateConceptSetManifest.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/newExecutionContext.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/normalizeCohortManifestPaths.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/normalizeConceptSetManifestPaths.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/normalizePipelineVersion.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/orchestratePipelineExport.html</loc>
@@ -310,6 +358,9 @@
     <loc>https://ohdsi.github.io/Picard/reference/prepareDisseminationData.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/publishStudyHubPosit.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/readSecrets.html</loc>
   </url>
   <url>
@@ -320,6 +371,9 @@
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/resetConceptSetManifest.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/resolveResultsPath.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/resolveSecretValue.html</loc>
