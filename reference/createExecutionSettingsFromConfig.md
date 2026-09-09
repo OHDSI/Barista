@@ -19,7 +19,8 @@ createExecutionSettingsFromConfig(
   cohortTable = NULL,
   databaseName = NULL,
   pipelineVersion = "prod",
-  cohortTableSuffix = NULL
+  cohortTableSuffix = NULL,
+  executionContext = NULL
 )
 ```
 
@@ -61,14 +62,27 @@ createExecutionSettingsFromConfig(
 
 - pipelineVersion:
 
-  Character. Pipeline version ("prod" for production table, "dev" or
-  "0.0.1" etc.).
+  Character. `"prod"` (the default) or a `MAJOR.MINOR.PATCH` version
+  means "use the configured production cohort table unchanged". Any
+  other value (e.g. `"dev"`, `"develop_ml"`) is treated as a test
+  namespace and routes to a suffixed cohort table. Ignored when
+  `executionContext` is supplied.
 
 - cohortTableSuffix:
 
   Character. Optional suffix for cohort table names in non-semver (test)
-  runs. Normalized to lowercase snake_case and truncated to 24
-  characters. If NULL, non-semver runs default to `"_dev"`.
+  runs. Normalized to lowercase snake_case via
+  [`normalizePipelineVersion()`](https://ohdsi.github.io/Picard/reference/normalizePipelineVersion.md).
+  If NULL, the non-semver `pipelineVersion` is used as the suffix. The
+  derived table name is rejected if it exceeds
+  `MAX_TEST_COHORT_TABLE_NAME_LENGTH` characters.
+
+- executionContext:
+
+  An optional `ExecutionContext` for the current run. When supplied, its
+  mode and normalized `pipelineVersion` control cohort table routing.
+  The legacy `pipelineVersion` and `cohortTableSuffix` arguments remain
+  available for direct callers.
 
 ## Value
 

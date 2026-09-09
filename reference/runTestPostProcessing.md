@@ -13,7 +13,8 @@ runTestPostProcessing(
   pipelineVersion = "dev",
   resultsPath = here::here("exec/results"),
   exportPath = here::here("dissemination/export/merge"),
-  cohortsFolderPath = here::here("inputs/cohorts")
+  cohortsFolderPath = here::here("inputs/cohorts"),
+  compress = FALSE
 )
 ```
 
@@ -40,6 +41,13 @@ runTestPostProcessing(
 
   Character. Path to cohorts folder for the CohortManifest. Defaults to
   "inputs/cohorts".
+
+- compress:
+
+  Logical. If TRUE, merged per-task result files are written as
+  gzip-compressed `.csv.gz`. See
+  [`runPostProcessing`](https://ohdsi.github.io/Picard/reference/runPostProcessing.md).
+  Default: FALSE.
 
 ## Value
 

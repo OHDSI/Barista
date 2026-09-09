@@ -197,7 +197,8 @@ sm <- makeStudyMeta(
       role = "qc"
     )
   ),
-  studyTags = c("OMOP", "OHDSI", "Characterization")
+  studyTags = c("OMOP", "OHDSI", "Characterization"),
+  studyDescription = "This study characterizes diabetes populations in an OMOP CDM."
 )
 ```
 
@@ -209,46 +210,63 @@ sm <- makeStudyMeta(
 [`setContributor()`](https://ohdsi.github.io/Picard/reference/setContributor.md) -
 `name`: Full name - `email`: Contact email - `role`: Role type (e.g.,
 “developer”, “qc”, “principal investigator”) - `studyTags`: Character
-vector of study tags for organization
+vector of study tags for organization - `studyDescription`: Optional
+character string used in the generated README study description. If
+omitted or `NULL`, the README contains the placeholder text
+`Add a short description about the study!`.
 
 ## Step 2: Configure Database Connection
 
-If analyzing a database (toolType = “dbms”), create a database
-configuration block using
-[`setDbConfigBlock()`](https://ohdsi.github.io/Picard/reference/setDbConfigBlock.md):
+If analyzing a database, create a database configuration block using
+[`makeBlock()`](https://ohdsi.github.io/Picard/reference/makeBlock.md):
 
 ``` r
-db <- setDbConfigBlock(
+db <- makeBlock(
   configBlockName = "my_cdm",
+  dbServer = "my_cdm",
   cdmDatabaseSchema = "omop_cdm_schema",
-  databaseName = "my_database_v1",
+  workDatabaseSchema = "work_schema",
   cohortTable = "study_cohorts",
+  databaseName = "my_database_v1",
   databaseLabel = "Primary CDM"
 )
 ```
 
 **Parameters:** - `configBlockName`: Identifier for this database
 configuration - `cdmDatabaseSchema`: Schema containing the OMOP CDM
-tables - `databaseName`: Name of the database (for internal tracking) -
-`cohortTable`: Name of the table where cohorts will be created -
-`databaseLabel`: Human-readable label for reports and documentation
+tables - `workDatabaseSchema`: Schema where you have write access
+(cohort tables, work tables) - `cohortTable`: Name of the table where
+cohorts will be created - `dbServer`: Key used to look up credentials in
+`~/.picard/secrets.yml` (defaults to `configBlockName`) -
+`databaseName`: Name of the database (for internal tracking) -
+`databaseLabel`: Human-readable label for reports and documentation -
+`tempEmulationSchema`: Optional; schema for temp tables on
+Snowflake/Oracle
+
+Note that the block carries **no credentials** — those live in
+`~/.picard/secrets.yml`, keyed by `dbServer` (see [Setting Up Database
+Credentials](#setting-up-database-credentials) below).
 
 **For multiple databases**, create multiple blocks:
 
 ``` r
-db1 <- setDbConfigBlock(
+db1 <- makeBlock(
   configBlockName = "my_cdm",
+  dbServer = "my_cdm",
   cdmDatabaseSchema = "omop_cdm_schema",
-  databaseName = "my_database_v1",
+  workDatabaseSchema = "work_schema",
   cohortTable = "study_cohorts",
+  databaseName = "my_database_v1",
   databaseLabel = "Primary CDM"
 )
 
-db2 <- setDbConfigBlock(
+db2 <- makeBlock(
   configBlockName = "secondary_cdm",
+  dbServer = "secondary_cdm",
   cdmDatabaseSchema = "secondary_omop_schema",
-  databaseName = "secondary_database_v1",
+  workDatabaseSchema = "work_schema_sec",
   cohortTable = "study_cohorts_sec",
+  databaseName = "secondary_database_v1",
   databaseLabel = "Secondary CDM"
 )
 ```
@@ -504,15 +522,18 @@ sm <- makeStudyMeta(
       role = "qc"
     )
   ),
-  studyTags = c("OMOP", "OHDSI", "Characterization")
+  studyTags = c("OMOP", "OHDSI", "Characterization"),
+  studyDescription = "This study characterizes diabetes populations in an OMOP CDM."
 )
 
 # 2. Configure database connection
 db <- makeBlock(
   configBlockName = "my_cdm",
+  dbServer = "my_cdm",
   cdmDatabaseSchema = "omop_cdm_schema",
-  databaseName = "my_database_v1",
+  workDatabaseSchema = "work_schema",
   cohortTable = "study_cohorts",
+  databaseName = "my_database_v1",
   databaseLabel = "Primary CDM"
 )
 

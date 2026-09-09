@@ -8,7 +8,12 @@ step for all subsequent analytical tasks in the pipeline.
 ## Usage
 
 ``` r
-generateCohorts(executionSettings, pipelineVersion, override = FALSE)
+generateCohorts(
+  executionSettings,
+  pipelineVersion,
+  executionContext = NULL,
+  override = FALSE
+)
 ```
 
 ## Arguments
@@ -30,6 +35,11 @@ generateCohorts(executionSettings, pipelineVersion, override = FALSE)
   Non-semver values (e.g. "dev") also trigger dev cohort table routing
   via
   [`createExecutionSettingsFromConfig()`](https://ohdsi.github.io/Picard/reference/createExecutionSettingsFromConfig.md).
+
+- executionContext:
+
+  An optional `ExecutionContext` for the current run. When supplied, its
+  pipeline version and result-path rules are used.
 
 - override:
 

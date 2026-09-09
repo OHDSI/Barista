@@ -14,7 +14,8 @@ runPostProcessing(
   resultsPath = here::here("exec/results"),
   exportPath = here::here("dissemination/export/merge"),
   cohortsFolderPath = here::here("inputs/cohorts"),
-  testMode = NULL
+  testMode = NULL,
+  compress = FALSE
 )
 ```
 
@@ -49,6 +50,19 @@ runPostProcessing(
   warnings) and qcStatus is set to "DevMode". When NULL (default),
   testMode is automatically set to TRUE for non-semver pipeline versions
   (e.g. "dev", "test") and FALSE for semantic versions (e.g. "1.0.0").
+
+- compress:
+
+  Logical. If TRUE, merged per-task result files are written as
+  gzip-compressed `.csv.gz` instead of plain `.csv` (passed through to
+  [`importAndBind`](https://ohdsi.github.io/Picard/reference/importAndBind.md)).
+  Reference/QC files (databaseInfo.csv, cohortManifestSnapshot.csv,
+  schema_review.csv, qc\_\*.csv) are always plain `.csv` regardless of
+  this setting, since only merged results tend to get large.
+  [`readr::read_csv()`](https://readr.tidyverse.org/reference/read_delim.html)/`spec_csv()`
+  read `.csv.gz` files transparently, so downstream code only needs to
+  know a file may end in `.gz` when `compress = TRUE` was used to
+  produce it. Default: FALSE.
 
 ## Value
 
@@ -104,13 +118,13 @@ Output files created in version export folder:
 Expected folder structure:
 
     exec/results/
-      databaseName1/
+      normalized_database_name1/
         version/
           task1/
             results.csv
           task2/
             results.csv
-      databaseName2/
+      normalized_database_name2/
         version/
           task1/
             results.csv

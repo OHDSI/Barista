@@ -211,6 +211,8 @@ Functions for creating new objects (create\*)
   : Create Blank Cohorts Load File
 - [`createBlankConceptSetsLoadFile()`](https://ohdsi.github.io/Picard/reference/createBlankConceptSetsLoadFile.md)
   : Create Blank Concept Sets Load File
+- [`createDisseminationEnv()`](https://ohdsi.github.io/Picard/reference/createDisseminationEnv.md)
+  : Create a Dissemination Environment Object
 - [`createExecutionSettings()`](https://ohdsi.github.io/Picard/reference/createExecutionSettings.md)
   : Create an ExecutionSettings object and set its attributes
 - [`createExecutionSettingsFromConfig()`](https://ohdsi.github.io/Picard/reference/createExecutionSettingsFromConfig.md)
@@ -275,8 +277,8 @@ Other utility and helper functions
   : Document Dependencies
 - [`editSecrets()`](https://ohdsi.github.io/Picard/reference/editSecrets.md)
   : Edit the secrets.yml file
-- [`expandManifestTags()`](https://ohdsi.github.io/Picard/reference/expandManifestTags.md)
-  : Expand JSON Tags to Columns
+- [`findStudyProjectRoot()`](https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.md)
+  : Find the root of a Picard study repository
 - [`formatFloats()`](https://ohdsi.github.io/Picard/reference/formatFloats.md)
   : Format Float Columns
 - [`formatPercentages()`](https://ohdsi.github.io/Picard/reference/formatPercentages.md)
@@ -289,12 +291,18 @@ Other utility and helper functions
   : Migrate Old CohortManifest SQLite to New Schema
 - [`migrateConceptSetManifest()`](https://ohdsi.github.io/Picard/reference/migrateConceptSetManifest.md)
   : Migrate Old ConceptSetManifest SQLite to New Schema
+- [`normalizeCohortManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeCohortManifestPaths.md)
+  : Normalize Legacy Cohort Manifest File Paths
+- [`normalizeConceptSetManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeConceptSetManifestPaths.md)
+  : Normalize Legacy Concept Set Manifest File Paths
 - [`pivotForComparison()`](https://ohdsi.github.io/Picard/reference/pivotForComparison.md)
   : Pivot Data Wide for Comparison
 - [`plotCohortGraph()`](https://ohdsi.github.io/Picard/reference/plotCohortGraph.md)
   : Plot Cohort Dependency Graph
 - [`prepareDisseminationData()`](https://ohdsi.github.io/Picard/reference/prepareDisseminationData.md)
   : Prepare Dissemination Data with Chained Transformations
+- [`publishStudyHubPosit()`](https://ohdsi.github.io/Picard/reference/publishStudyHubPosit.md)
+  : Publish Study Hub to Posit Connect
 - [`recordTaskExecution()`](https://ohdsi.github.io/Picard/reference/recordTaskExecution.md)
   : Record Task Execution Status
 - [`resetCohortManifest()`](https://ohdsi.github.io/Picard/reference/resetCohortManifest.md)
@@ -339,8 +347,6 @@ Other utility and helper functions
   : Validate Study Task Script
 - [`validateUlyssesStructure()`](https://ohdsi.github.io/Picard/reference/validateUlyssesStructure.md)
   : Validate Ulysses Repository Structure
-- [`zipAndArchive()`](https://ohdsi.github.io/Picard/reference/zipAndArchive.md)
-  : Zip and Archive results from a study execution
 
 # Articles
 

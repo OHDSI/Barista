@@ -39,6 +39,8 @@ identify the generated SQL.
 
 - [`CohortDef$getFilePath()`](#method-CohortDef-getFilePath)
 
+- [`CohortDef$getDisplayPath()`](#method-CohortDef-getDisplayPath)
+
 - [`CohortDef$getSql()`](#method-CohortDef-getSql)
 
 - [`CohortDef$getFileHash()`](#method-CohortDef-getFileHash)
@@ -107,7 +109,28 @@ Initialize a new CohortDef
 
 #### Returns
 
-Character. Relative path to the cohort file. Get the generated SQL
+Character. Absolute path to the cohort file — safe to read regardless of
+the current working directory. Get the file path for display
+
+------------------------------------------------------------------------
+
+### Method `getDisplayPath()`
+
+#### Usage
+
+    CohortDef$getDisplayPath(root = NULL)
+
+#### Arguments
+
+- `root`:
+
+  Character or NULL. Study repository root. When supplied, the path is
+  returned relative to it (the form stored in the manifest); otherwise
+  the absolute path is returned.
+
+#### Returns
+
+Character. A human-facing path. Get the generated SQL
 
 ------------------------------------------------------------------------
 

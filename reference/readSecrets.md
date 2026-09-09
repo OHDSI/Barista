@@ -3,8 +3,8 @@
 Reads a secrets.yml file using
 [`yaml::read_yaml`](https://yaml.r-lib.org/reference/read_yaml.html)
 with `eval.expr = FALSE`, so `!expr` tags are preserved as raw strings
-for `resolveSecretValue()` to evaluate later. Returns a named list keyed
-by dbServer names (plus optional `atlas` key).
+for to evaluate later. Returns a named list keyed by dbServer names
+(plus optional `atlas` key).
 
 ## Usage
 

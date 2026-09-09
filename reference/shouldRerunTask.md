@@ -6,11 +6,18 @@ Determines whether a task needs to be rerun by checking:
 
 2.  Dependency file modifications (extracted from source() calls)
 
-3.  Cohort manifest changes (hash comparison)
+3.  Cohort manifest changes — compares
+    [CohortManifest\$getManifestHash()](https://ohdsi.github.io/Picard/reference/CohortManifest.md)
+    against the hash recorded on the previous run. A rerun is forced
+    when the hash differs, when no hash was recorded (first run, or a
+    legacy history row), or when the current hash cannot be computed at
+    all.
 
 4.  Previous run errors (checked in logs and history)
 
-5.  Version changes
+5.  Version changes. History is scoped by task, config block, and
+    `pipeline_version`, so separate test namespaces do not reuse one
+    another's run state.
 
 ## Usage
 
@@ -20,7 +27,8 @@ shouldRerunTask(
   configBlock,
   executionSettings,
   pipelineVersion,
-  tasksFolderPath = here::here("analysis/tasks")
+  tasksFolderPath = here::here("analysis/tasks"),
+  cohortManifestHash = NULL
 )
 ```
 
@@ -46,6 +54,13 @@ shouldRerunTask(
 
   Character. Path to tasks folder (default:
   here::here("analysis/tasks"))
+
+- cohortManifestHash:
+
+  Character or NULL. A pre-computed cohort manifest hash (see
+  [`.getCohortManifestHash()`](https://ohdsi.github.io/Picard/reference/dot-getCohortManifestHash.md)).
+  When NULL (default) it is computed here; callers that check many tasks
+  in one run pass it in to avoid re-loading the manifest per task.
 
 ## Value
 

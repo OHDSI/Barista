@@ -3,8 +3,13 @@
 Dissemination scripts are sourced from `dissemination/pretty/R/` in
 alphabetical order. Each script is sourced in the global environment, so
 any variables, functions, or file outputs are available at the console
-level. A `disseminationEnv` object is automatically created and injected
-into the global environment for use by dissemination scripts.
+level. A `disseminationEnv` object is automatically created (via
+[`createDisseminationEnv`](https://ohdsi.github.io/Picard/reference/createDisseminationEnv.md))
+and injected into the global environment for use by dissemination
+scripts. Call
+[`createDisseminationEnv`](https://ohdsi.github.io/Picard/reference/createDisseminationEnv.md)
+directly to build the same object at the console while authoring a
+dissemination script.
 
 ## Usage
 

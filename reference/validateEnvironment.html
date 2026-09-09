@@ -11,7 +11,7 @@ Call before execStudyPipeline() or runPostProcessing()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">picard</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.0.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.0.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -54,13 +54,23 @@ Call before execStudyPipeline() or runPostProcessing().</p>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>Invisible TRUE if valid, aborts if drift detected</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p><code>renv::status()</code> always returns a list describing the project state — it
+never returns <code>NULL</code> — so the result must be inspected rather than merely
+tested for <code>NULL</code>. A project is treated as in sync when <code>renv::status()</code>
+reports <code>synchronized = TRUE</code>, or (on older renv versions that omit the
+flag) when no package version differs between the project library and
+<code>renv.lock</code>. Source-only mismatches, such as packages installed from an
+unknown source, are reported as a warning and do not block the pipeline.</p>
+    </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Martin Lavallee.</p>
+  <p>Developed by Martin Lavallee, Katy Sadowski.</p>
 </div>
 
 <div class="pkgdown-footer-right">

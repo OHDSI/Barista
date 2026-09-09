@@ -11,7 +11,8 @@ makeStudyMeta(
   studyType,
   contributors,
   studyLinks = NULL,
-  studyTags = NULL
+  studyTags = NULL,
+  studyDescription = NULL
 )
 ```
 
@@ -36,6 +37,10 @@ makeStudyMeta(
 - studyTags:
 
   a list of study tags
+
+- studyDescription:
+
+  a character string describing the study, or NULL
 
 ## Value
 

@@ -39,6 +39,8 @@ concept information.
 
 - [`ConceptSetDef$getFilePath()`](#method-ConceptSetDef-getFilePath)
 
+- [`ConceptSetDef$getDisplayPath()`](#method-ConceptSetDef-getDisplayPath)
+
 - [`ConceptSetDef$getJson()`](#method-ConceptSetDef-getJson)
 
 - [`ConceptSetDef$getHash()`](#method-ConceptSetDef-getHash)
@@ -90,8 +92,29 @@ Initialize a new ConceptSetDef
 
 #### Returns
 
-Character. Relative path to the concept set file. Get the concept set
-JSON
+Character. Absolute path to the concept set file — safe to read
+regardless of the current working directory. Get the file path for
+display
+
+------------------------------------------------------------------------
+
+### Method `getDisplayPath()`
+
+#### Usage
+
+    ConceptSetDef$getDisplayPath(root = NULL)
+
+#### Arguments
+
+- `root`:
+
+  Character or NULL. Study repository root. When supplied, the path is
+  returned relative to it (the form stored in the manifest); otherwise
+  the absolute path is returned.
+
+#### Returns
+
+Character. A human-facing path. Get the concept set JSON
 
 ------------------------------------------------------------------------
 

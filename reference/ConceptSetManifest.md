@@ -14,11 +14,12 @@ and stores their metadata in a SQLite database located at
 inputs/conceptSets/conceptSetManifest.sqlite. Each ConceptSetDef is
 assigned a sequential ID based on its position in the manifest.
 
-The load file is a transient, one-time import mechanism: rows whose
-atlasId or label are already registered in the manifest are an error,
-not an update. To sync registered concept sets with ATLAS, run
-`updateAtlasConceptSets()`; to update a single concept set, use
-`addAtlasConceptSet(stopIfExists = FALSE)`.
+By default, the load file is treated as a transient, one-time import
+mechanism: rows whose atlasId is already registered in the manifest are
+an error, not an update. Set `stopIfExists = FALSE` to instead update
+those rows in place, which supports iterating on the load file across
+repeated runs. To sync registered concept sets with ATLAS without a load
+file, use `updateAtlasConceptSets()`.
 
 **Processing Steps:**
 
@@ -81,14 +82,16 @@ changed, then call this method to apply updates.
 
 **Processing:**
 
-1.  Retrieves the concept set definition (CIRCE JSON) by ID
+1.  Resolves the concept set by manifest ID or exact label
 
-2.  Builds SQL query using
+2.  Retrieves the concept set definition (CIRCE JSON)
+
+3.  Builds SQL query using
     [`CirceR::buildConceptSetQuery()`](https://ohdsi.github.io/CirceR/reference/buildConceptSetQuery.html)
 
-3.  Executes query against the OMOP vocabulary schema
+4.  Executes query against the OMOP vocabulary schema
 
-4.  Returns results with concept_id and concept_name columns
+5.  Returns results with concept_id and concept_name columns
 
 Extract Source Codes for Concept Sets
 
@@ -219,7 +222,11 @@ concept set:
 
 - [`ConceptSetManifest$tabulateManifest()`](#method-ConceptSetManifest-tabulateManifest)
 
+- [`ConceptSetManifest$viewManifest()`](#method-ConceptSetManifest-viewManifest)
+
 - [`ConceptSetManifest$getDbPath()`](#method-ConceptSetManifest-getDbPath)
+
+- [`ConceptSetManifest$getProjectRoot()`](#method-ConceptSetManifest-getProjectRoot)
 
 - [`ConceptSetManifest$getExecutionSettings()`](#method-ConceptSetManifest-getExecutionSettings)
 
@@ -242,6 +249,8 @@ concept set:
 - [`ConceptSetManifest$queryConceptSetsByIds()`](#method-ConceptSetManifest-queryConceptSetsByIds)
 
 - [`ConceptSetManifest$queryConceptSetsByTag()`](#method-ConceptSetManifest-queryConceptSetsByTag)
+
+- [`ConceptSetManifest$queryConceptSetsByCategory()`](#method-ConceptSetManifest-queryConceptSetsByCategory)
 
 - [`ConceptSetManifest$queryConceptSetsByTagName()`](#method-ConceptSetManifest-queryConceptSetsByTagName)
 
@@ -317,7 +326,10 @@ Initialize a new ConceptSetManifest
 
 #### Usage
 
-    ConceptSetManifest$new(dbPath = "inputs/conceptSets/conceptSetManifest.sqlite")
+    ConceptSetManifest$new(
+      dbPath = "inputs/conceptSets/conceptSetManifest.sqlite",
+      projectRoot = NULL
+    )
 
 #### Arguments
 
@@ -325,8 +337,17 @@ Initialize a new ConceptSetManifest
 
   Character. Path to the SQLite database. Defaults to
   "inputs/conceptSets/conceptSetManifest.sqlite". The directory is
-  created automatically if it does not exist. Get the manifest as a list
-  of ConceptSetDef objects
+  created automatically if it does not exist.
+
+- `projectRoot`:
+
+  Character or NULL. Study repository root against which stored file
+  paths are resolved. When `NULL` (default) the root is discovered once
+  via
+  [`findStudyProjectRoot()`](https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.md)
+  from the manifest's directory and cached for the life of the object.
+  Supply an explicit path for tests or unusual layouts. Get the manifest
+  as a list of ConceptSetDef objects
 
 ------------------------------------------------------------------------
 
@@ -344,24 +365,74 @@ List. A list of ConceptSetDef objects in the manifest.
 
 ### Method `tabulateManifest()`
 
-Tabulate the manifest as a tibble
+Tabulate the concept set manifest
 
 #### Usage
 
-    ConceptSetManifest$tabulateManifest(filter = c("active", "deleted", "all"))
+    ConceptSetManifest$tabulateManifest(
+      filter = c("active", "deleted", "all"),
+      tags_format = c("nested", "json", "wide")
+    )
 
 #### Arguments
 
 - `filter`:
 
-  Character. Controls which rows are returned. One of `"active"`
-  (default), `"deleted"`, or `"all"`.
+  Character. One of "active", "deleted", or "all". Defaults to "active".
+
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Parse JSON tags into a nested tibble with
+    tag_name/tag_value columns
+
+  - "json": Keep tags as raw JSON string
+
+  - "wide": Expand tags into individual columns (one per unique tag key)
 
 #### Returns
 
-A tibble with columns: id, label, category, tags, file_path, hash,
-source_type, cohort_type, status, created_at, deleted_at Get the
-manifest path
+Tibble with concept set manifest data. Tags format depends on
+tags_format parameter.
+
+------------------------------------------------------------------------
+
+### Method `viewManifest()`
+
+View the concept set manifest in RStudio viewer
+
+Opens an interactive RStudio viewer showing key concept set metadata:
+id, label, category, tags, and file_path. This is a convenience function
+for exploring manifest contents without console clutter.
+
+#### Usage
+
+    ConceptSetManifest$viewManifest(
+      filter = c("active", "deleted", "all"),
+      tags_format = c("nested", "json", "wide")
+    )
+
+#### Arguments
+
+- `filter`:
+
+  Character. One of "active", "deleted", or "all". Defaults to "active".
+
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as structured nested tibble
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
+#### Returns
+
+Invisibly returns the tibble displayed in the viewer. Get the manifest
+path
 
 ------------------------------------------------------------------------
 
@@ -373,7 +444,21 @@ manifest path
 
 #### Returns
 
-Character. The path to the SQLite database. Get the execution settings
+Character. The path to the SQLite database. Get the study repository
+root
+
+------------------------------------------------------------------------
+
+### Method `getProjectRoot()`
+
+#### Usage
+
+    ConceptSetManifest$getProjectRoot()
+
+#### Returns
+
+Character. The cached study repository root used to resolve stored file
+paths. Get the execution settings
 
 ------------------------------------------------------------------------
 
@@ -630,7 +715,8 @@ inside a `tryCatch` so a single failure does not abort the entire batch.
 
     ConceptSetManifest$importAtlasConceptSets(
       conceptSetsLoad,
-      atlasConnection = NULL
+      atlasConnection = NULL,
+      stopIfExists = TRUE
     )
 
 #### Arguments
@@ -646,6 +732,14 @@ inside a `tryCatch` so a single failure does not abort the entire batch.
   `getConceptSetDefinition(conceptSetId)` method. If `NULL`, falls back
   to the connection stored via `$setAtlasConnection()`.
 
+- `stopIfExists`:
+
+  Logical. If TRUE (default), raises an error when any load row's
+  atlasId is already registered in the manifest. If FALSE, those rows
+  are updated in place instead (same ID/file path, hash refreshed,
+  category/tags replaced) via
+  `addAtlasConceptSet(stopIfExists = FALSE)`. Default: TRUE (fail-safe).
+
 #### Returns
 
 Invisible tibble imported concept sets. Query concept sets by IDs
@@ -656,7 +750,10 @@ Invisible tibble imported concept sets. Query concept sets by IDs
 
 #### Usage
 
-    ConceptSetManifest$queryConceptSetsByIds(ids)
+    ConceptSetManifest$queryConceptSetsByIds(
+      ids,
+      tags_format = c("nested", "json", "wide")
+    )
 
 #### Arguments
 
@@ -664,10 +761,21 @@ Invisible tibble imported concept sets. Query concept sets by IDs
 
   Integer vector. One or more concept set IDs.
 
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
 #### Returns
 
-Tibble with columns: id, label, category, tags, file_path, hash,
-created_at. Query concept sets by tag
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if no matches are found. Query concept sets by tag
 
 ------------------------------------------------------------------------
 
@@ -675,7 +783,11 @@ created_at. Query concept sets by tag
 
 #### Usage
 
-    ConceptSetManifest$queryConceptSetsByTag(tagStrings, match = c("any", "all"))
+    ConceptSetManifest$queryConceptSetsByTag(
+      tagStrings,
+      match = c("any", "all"),
+      tags_format = c("nested", "json", "wide")
+    )
 
 #### Arguments
 
@@ -691,10 +803,62 @@ created_at. Query concept sets by tag
   Character. "any" (default) returns concept sets matching at least one
   tag; "all" returns only concept sets matching every tag.
 
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
 #### Returns
 
-Tibble with columns: id, label, category, tags, file_path, hash,
-created_at. Query cohorts by category
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if no matches are found. Query concept sets by category
+
+------------------------------------------------------------------------
+
+### Method `queryConceptSetsByCategory()`
+
+#### Usage
+
+    ConceptSetManifest$queryConceptSetsByCategory(
+      category,
+      matchType = c("exact", "pattern"),
+      tags_format = c("nested", "json", "wide")
+    )
+
+#### Arguments
+
+- `category`:
+
+  Character vector. One or more category to search for. A concept set is
+  included when it matches at least one of the supplied category (OR
+  logic).
+
+- `matchType`:
+
+  Character. Either "exact" for exact match or "pattern" for pattern
+  matching. Defaults to "exact".
+
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
+#### Returns
+
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if no matches are found. Query concept sets by tag name
 
 ------------------------------------------------------------------------
 
@@ -702,18 +866,32 @@ created_at. Query cohorts by category
 
 #### Usage
 
-    ConceptSetManifest$queryConceptSetsByTagName(tagName)
+    ConceptSetManifest$queryConceptSetsByTagName(
+      tagName,
+      tags_format = c("nested", "json", "wide")
+    )
 
 #### Arguments
 
 - `tagName`:
 
-  Character vector. The name of tags to query
+  Character vector. The name of tags to query.
+
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
 
 #### Returns
 
-Tibble with columns: id, label, category, tags, file_path, hash,
-source_type, created_at.
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if no matches are found.
 
 ------------------------------------------------------------------------
 
@@ -723,7 +901,10 @@ Query concept sets missing a specific tag
 
 #### Usage
 
-    ConceptSetManifest$queryConceptSetsMissingTag(tagName)
+    ConceptSetManifest$queryConceptSetsMissingTag(
+      tagName,
+      tags_format = c("nested", "json", "wide")
+    )
 
 #### Arguments
 
@@ -731,10 +912,21 @@ Query concept sets missing a specific tag
 
   Character. The name of the tag to check for absence.
 
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
 #### Returns
 
-Tibble with columns: id, label, category, tags, file_path, hash,
-created_at. Returns NULL if all concept sets have the tag.
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if all concept sets have the tag.
 
 ------------------------------------------------------------------------
 
@@ -744,7 +936,10 @@ Query concept sets by tag value mapping
 
 #### Usage
 
-    ConceptSetManifest$queryConceptSetsWithTagValues(tagValueMapping)
+    ConceptSetManifest$queryConceptSetsWithTagValues(
+      tagValueMapping,
+      tags_format = c("nested", "json", "wide")
+    )
 
 #### Arguments
 
@@ -754,10 +949,21 @@ Query concept sets by tag value mapping
   Example: `list(status = "approved", type = "primary")` requires both
   conditions (AND logic).
 
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
 #### Returns
 
-Tibble with columns: id, label, category, tags, file_path, hash,
-created_at. Returns NULL if no concept sets match all tag conditions.
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if no concept sets match all tag conditions.
 
 ------------------------------------------------------------------------
 
@@ -789,7 +995,8 @@ label
 
     ConceptSetManifest$queryConceptSetsByLabel(
       labels,
-      matchType = c("exact", "pattern")
+      matchType = c("exact", "pattern"),
+      tags_format = c("nested", "json", "wide")
     )
 
 #### Arguments
@@ -805,10 +1012,21 @@ label
   Character. Either "exact" for exact match or "pattern" for pattern
   matching. Defaults to "exact".
 
+- `tags_format`:
+
+  Character. One of "nested", "json", or "wide".
+
+  - "nested" (default): Tags as nested tibble with tag_name/tag_value
+    columns
+
+  - "json": Tags as raw JSON string
+
+  - "wide": Tags expanded into individual columns
+
 #### Returns
 
-Tibble with columns: id, label, category, tags, file_path, hash,
-created_at.
+Tibble with matching concept sets. Tag columns depend on `tags_format`.
+Returns NULL if no matches are found.
 
 ------------------------------------------------------------------------
 
@@ -971,7 +1189,8 @@ as JSON, and registers it in the manifest.
       conceptSetIds,
       combinedLabel,
       combinedCategory = "combined",
-      combinedTags = list()
+      combinedTags = list(),
+      stopIfExists = TRUE
     )
 
 #### Arguments
@@ -996,9 +1215,19 @@ as JSON, and registers it in the manifest.
   `sourceConceptSetIds` is automatically added with comma-separated
   source IDs.
 
+- `stopIfExists`:
+
+  Logical. If TRUE (default), raises an error when an active concept set
+  with `combinedLabel` is already registered. If FALSE, updates the
+  existing concept set in place via `addCaprConceptSet()`'s upsert path
+  — it keeps its ID and file path, and `combinedCategory`/
+  `combinedTags` replace the registered metadata. Default: TRUE
+  (fail-safe).
+
 #### Returns
 
-Invisible integer. The ID of the newly created combined concept set.
+Invisible integer. The ID of the newly created (or updated) combined
+concept set.
 
 ------------------------------------------------------------------------
 
@@ -1405,6 +1634,15 @@ in-memory list:
 
 - Orphaned files on disk not in manifest are automatically deleted.
 
+Stored file paths are resolved against the study repository root before
+any disk comparison, and hashes are computed from file contents only, so
+a row is reported as `"hash_updated"` only when the file's contents
+actually changed — never because its stored path used an older
+convention. To rewrite legacy stored paths to the current
+repo-root-relative form, run
+[`normalizeConceptSetManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeConceptSetManifestPaths.md)
+once.
+
 #### Usage
 
     ConceptSetManifest$syncManifest(strict_mode = TRUE)
@@ -1436,13 +1674,15 @@ identifiers and display names.
 
 #### Usage
 
-    ConceptSetManifest$grabConceptInfoFromSet(conceptSetId)
+    ConceptSetManifest$grabConceptInfoFromSet(conceptSetRef)
 
 #### Arguments
 
-- `conceptSetId`:
+- `conceptSetRef`:
 
-  Integer. The concept set ID in the manifest.
+  Integer or Character. Concept set reference in the manifest. Pass
+  either the manifest ID or the exact concept set label. Use
+  `tabulateManifest()` to inspect available IDs and labels.
 
 #### Returns
 

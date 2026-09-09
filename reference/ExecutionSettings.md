@@ -38,6 +38,8 @@ An R6 class to define an ExecutionSettings object
 
 - [`ExecutionSettings$getConnection()`](#method-ExecutionSettings-getConnection)
 
+- [`ExecutionSettings$reviewConnectionDetails()`](#method-ExecutionSettings-reviewConnectionDetails)
+
 - [`ExecutionSettings$clone()`](#method-ExecutionSettings-clone)
 
 ------------------------------------------------------------------------
@@ -164,6 +166,20 @@ database operations.
 #### Returns
 
 DatabaseConnectorJdbcConnection or NULL
+
+------------------------------------------------------------------------
+
+### Method `reviewConnectionDetails()`
+
+Return the configured connectionDetails object
+
+#### Usage
+
+    ExecutionSettings$reviewConnectionDetails()
+
+#### Returns
+
+A DatabaseConnector connectionDetails object or NULL.
 
 ------------------------------------------------------------------------
 

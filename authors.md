@@ -4,20 +4,20 @@
 
 - **Martin Lavallee**. Author, maintainer.
 
-- **Katy Sadowski**. Contributor.
+- **Katy Sadowski**. Author.
 
 ## Citation
 
 Source:
 [`DESCRIPTION`](https://github.com/ohdsi/Picard/blob/main/DESCRIPTION)
 
-Lavallee M (2026). *picard: RWE Pipelining Tool*. R package version
-0.0.6, <https://ohdsi.github.io/Picard/>.
+Lavallee M, Sadowski K (2026). *picard: RWE Pipelining Tool*. R package
+version 0.0.7, <https://ohdsi.github.io/Picard/>.
 
     @Manual{,
       title = {picard: RWE Pipelining Tool},
-      author = {Martin Lavallee},
+      author = {Martin Lavallee and Katy Sadowski},
       year = {2026},
-      note = {R package version 0.0.6},
+      note = {R package version 0.0.7},
       url = {https://ohdsi.github.io/Picard/},
     }

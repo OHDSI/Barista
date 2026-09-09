@@ -21,14 +21,26 @@ loadCohortManifest(
 
 - cohortsFolderPath:
 
-  Character. Path to the cohorts folder containing the manifest
-  database. Defaults to `here::here("inputs/cohorts")`.
+  Character. Path to the cohorts folder, or anywhere inside the study
+  repository. Defaults to `here::here("inputs/cohorts")`. The repository
+  root is discovered with
+  [`findStudyProjectRoot()`](https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.md)
+  and the manifest is always read from
+  `<root>/inputs/cohorts/cohortManifest.sqlite`.
 
 - executionSettings:
 
   An ExecutionSettings object containing database configuration for
   cohort generation. Optional; can be added later using
   `$setExecutionSettings()`.
+
+- autoSync:
+
+  Logical. If TRUE (default), reconcile the manifest against the files
+  on disk after loading (see `$syncManifest()`). This only affects
+  file/row reconciliation — it is **not** related to path resolution,
+  and setting it to FALSE is not a workaround for a manifest that fails
+  to load.
 
 - verbose:
 
@@ -48,3 +60,24 @@ After loading, the function checks for new files in `json/`, `sql/`, and
 `derived/` directories that are not tracked in the manifest. These are
 reported as warnings but NOT auto-added (because `category` is required
 and cannot be guessed).
+
+### File paths
+
+Cohort file paths are stored **relative to the study repository root**
+(e.g. `inputs/cohorts/json/mycohort.json`). Loading resolves them
+against that root, so a manifest loads identically on any machine and
+from any working directory — you do not need to
+[`setwd()`](https://rdrr.io/r/base/getwd.html) into the study repo
+first.
+
+Manifests created before this convention may hold
+working-directory-relative, manifest-folder-relative, or absolute paths.
+Those still resolve through a compatibility fallback, but you can
+rewrite them to the current convention once with
+[`normalizeCohortManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeCohortManifestPaths.md).
+Ordinary loads never modify the SQLite file.
+
+## See also
+
+[`normalizeCohortManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeCohortManifestPaths.md),
+[`findStudyProjectRoot()`](https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.md)

@@ -15,6 +15,8 @@ runPreflightChecks(
   testMode = FALSE,
   skipRenv = FALSE,
   skipConnectivityCheck = TRUE,
+  ignoreUncommittedPaths = NULL,
+  skipCodeStateCheck = FALSE,
   resultsPath = here::here("exec/results"),
   tasksFolderPath = here::here("analysis/tasks")
 )
@@ -43,6 +45,20 @@ runPreflightChecks(
 
   Logical. If TRUE (default), database connectivity check is skipped.
 
+- ignoreUncommittedPaths:
+
+  Character vector or NULL. Repo-relative paths whose uncommitted
+  changes should not fail the code-state check. When NULL (default) the
+  list is read from `ignoreUncommittedPaths` in the `default:` block of
+  config.yml, which itself defaults to ignoring nothing. Pass
+  `character(0)` to force strict checking.
+
+- skipCodeStateCheck:
+
+  Logical. If TRUE, the code-state check is skipped entirely — a last
+  resort. The run is still allowed, but the checklist and the run
+  history record that the working tree was never verified.
+
 - resultsPath:
 
   Character. Path to the results root folder for collision check.
@@ -53,6 +69,9 @@ runPreflightChecks(
 
 ## Value
 
-Invisibly returns a list with `lockfileHash` and `taskFilesToRun` for
-downstream use in
+Invisibly returns a list with `lockfileHash`, `taskFilesToRun` and
+`codeState` for downstream use in
 [`execute_pipeline()`](https://ohdsi.github.io/Picard/reference/execute_pipeline.md).
+`codeState` is a list with `sha`, `status`, `ignoredFiles` and
+`ignorePaths` and is written into `exec/logs/task_run_history.csv` so
+the audit trail never claims a clean tree when the tree was not clean.

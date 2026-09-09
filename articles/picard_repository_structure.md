@@ -21,7 +21,10 @@ Picard uses the Ulysses repository structure, adding specialized
 directories and configuration for cohort-based studies, Evidence
 Generation Plans, and results dissemination. This vignette describes the
 standard Ulysses repository structure created when you initialize a
-project using `launchUlyssesRepo()`.
+project by bundling study settings with
+[`makeUlyssesStudySettings()`](https://ohdsi.github.io/Picard/reference/makeUlyssesStudySettings.md)
+and calling `$initUlyssesRepo()` on the result (see [Launching a Picard
+Study](https://ohdsi.github.io/Picard/articles/launching_a_study.md)).
 
 ## Pipeline Workflow and Folder Organization
 
@@ -37,24 +40,30 @@ real-world evidence study:
     │    (Define phenotypes, cohorts, covariates)                    │
     │         ↓                                                        │
     │ 3. ANALYSIS                                                     │
-    │    analysis/tasks/ + analysis/src/ + analysis/migrations/     │
+    │    analysis/tasks/ + analysis/src/                              │
     │    (Execute analyses, generate statistics)                      │
     │         ↓                                                        │
     │ 4. EXECUTION OUTPUT                                             │
     │    exec/results/[database]/[version]/[task]/                  │
     │    (Raw results by task, database, version)                     │
     │         ↓                                                        │
-    │ 5. DISSEMINATION                                                │
-    │    dissemination/export/ + dissemination/quarto/               │
-    │    (Format results, create Study Hub website)                   │
+    │ 5. POST-PROCESSING & DISSEMINATION                              │
+    │    dissemination/export/merge/ + dissemination/pretty/ +       │
+    │    dissemination/quarto/                                        │
+    │    (Merge results, format for release, build Study Hub website) │
     └─────────────────────────────────────────────────────────────────┘
 
 **Workflow sequence:** 1. Initialize with metadata (config.yml defines
-databases and credentials) 2. Load or create inputs (cohorts and concept
-sets) 3. Execute analysis tasks (code in analysis/tasks runs using
-inputs) 4. Raw results written to exec/results organized by database and
-version 5. Post-processing (migrations) and formatting (excel, CSV) 6.
-Dissemination via Study Hub (quarto website) and formatted exports
+databases and schemas; credentials live in `~/.picard/secrets.yml`) 2.
+Load or create inputs (cohorts and concept sets) 3. Execute analysis
+tasks (code in analysis/tasks runs using inputs) 4. Raw results written
+to exec/results organized by database and version 5. Post-processing:
+[`runPostProcessing()`](https://ohdsi.github.io/Picard/reference/runPostProcessing.md)
+merges raw results across databases into `dissemination/export/merge/`,
+with reference files and QC reports 6. Dissemination: numbered scripts
+in `dissemination/pretty/R/` format merged results via
+[`sourceDisseminationScripts()`](https://ohdsi.github.io/Picard/reference/sourceDisseminationScripts.md);
+the Study Hub (quarto website) renders narrative and results together
 
 ## Ulysses Repository Outline
 
@@ -162,8 +171,8 @@ Add a short description about the study!
 - [Study Repository](https://github.com/org/repo)
 ```
 
-The README is auto-generated when you launch a study using
-`launchUlyssesRepo()`. You should edit the Study Description section to
+The README is auto-generated when you initialize a study with
+`$initUlyssesRepo()`. You should edit the Study Description section to
 explain your research question and study design. Update the badges and
 version as your study progresses.
 
@@ -193,84 +202,63 @@ Format follows semantic versioning conventions:
 
 #### config.yml
 
-Central configuration file specifying parameters needed to establish
-database connections. Uses YAML format with two section types:
+Central configuration file describing the study and its databases. It
+holds **no credentials** — only non-sensitive settings. Uses YAML format
+with two section types:
 
-- **default:** Universal study settings (project name, version)
-- **block headers:** Database-specific configurations (dbms,
-  credentials, schemas)
+- **default:** Universal study settings (`projectName`, `version`, and
+  optionally `ignoreUncommittedPaths`)
+- **block headers:** One block per database, holding schema names, table
+  names, and a `dbServer` pointer into `secrets.yml`
 
-When you source a block header in a task file, the pipeline runs using
-only that block’s configuration, enabling multi-database studies.
+`createExecutionSettingsFromConfig(configBlock = "...")` reads a block
+to run the pipeline against that database, enabling multi-database
+studies.
 
-**Important:** Connection details vary by database system. The codebase
-distinguishes between:
+**Where credentials live:** DBMS type, server/port (or Snowflake
+`connectionString`), username, and password are **not** in `config.yml`.
+They live in a user-level `~/.picard/secrets.yml`, keyed by the block’s
+`dbServer` field. This keeps `config.yml` safe to commit. Set
+`secrets.yml` up with
+[`setupDbSecretsKeyring()`](https://ohdsi.github.io/Picard/reference/setupDbSecretsKeyring.md)
+/
+[`editSecrets()`](https://ohdsi.github.io/Picard/reference/editSecrets.md)
+— see [Launching a Picard
+Study](https://ohdsi.github.io/Picard/articles/launching_a_study.html#setting-up-database-credentials).
 
-- **Snowflake:** Uses `connectionString` format (JDBC connection string)
-- **PostgreSQL, SQL Server, MySQL, Oracle, Redshift:** Use `server` and
-  `port` fields
+**Fields in a config.yml database block:**
 
-**Protecting Credentials with !expr:**
-
-The `!expr` tag (from the config package) allows you to evaluate R code
-within the config file. This is critical for security: it enables
-pulling credentials from environment variables rather than storing them
-as plain text in config.yml.
-
-``` yaml
-user: !expr Sys.getenv('dbUser')        # Evaluates R code: retrieves DB_USER from environment
-password: !expr Sys.getenv('dbPassword') # Evaluates R code: retrieves DB_PASSWORD from environment
-```
-
-You can use any R function wrapped in `!expr` to retrieve credentials,
-including:
-
-- **Environment variables:** `!expr Sys.getenv('VAR_NAME')`
-- **Keyring package:**
-  `!expr keyring::key_get(service = 'picard', username = 'atlasUser')`
-- **Custom functions:**
-  `!expr my_secure_fetch_credential('db_password')`
-
-**Best practice:** Always use `!expr` with a secure credential storage
-system. Never store passwords or connection strings as plain text in
-config.yml or commit them to git.
-
-**Common credentials:**
-
-- `dbms`: Database type (snowflake, sql server, postgresql, mysql,
-  oracle, redshift)
-- `user`: Database username (from environment variable via
-  `!expr Sys.getenv()`)
-- `password`: Database password (from environment variable)
+- `dbServer`: Key used to look up credentials in `secrets.yml` (defaults
+  to the block name)
 - `databaseName`: Internal reference name (snake_case with database +
   snapshot date)
 - `databaseLabel`: Pretty name for output formatting
 - `cdmDatabaseSchema`: Schema containing OMOP CDM tables (format:
   `schema` or `database.schema`)
 - `vocabDatabaseSchema`: Schema containing vocabulary tables (usually
-  same as cdmDatabaseSchema)
-- `workDatabaseSchema`: Schema where user has write access (for cohort
-  tables and intermediary work)
-- `tempEmulationSchema`: Optional schema for temp tables (snowflake,
-  oracle)
-- `cohortTable`: Name of cohort table to create (default:
-  `{repoName}_{databaseName}`)
+  same as `cdmDatabaseSchema`)
+- `workDatabaseSchema`: Schema where the user has write access (for
+  cohort tables and intermediary work)
+- `tempEmulationSchema`: Schema for temp tables on platforms that need
+  it (Snowflake, Oracle)
+- `cohortTable`: Name of the cohort table to create
 
-Example config.yml with Snowflake and PostgreSQL:
+Blocks are normally added with
+[`makeBlock()`](https://ohdsi.github.io/Picard/reference/makeBlock.md) +
+[`addBlock()`](https://ohdsi.github.io/Picard/reference/addBlock.md)
+rather than hand-edited.
+
+Example `config.yml` with two databases:
 
 ``` yaml
-# Config File for my_study
+# Exec Config File for Ulysses Repo: my_study
 
 default:
   projectName: my_study
   version: 1.0.0
 
-# Snowflake: Uses connectionString format
 snowflake_prod:
-  dbms: snowflake
-  connectionString: !expr Sys.getenv('dbConnectionString')
-  user: !expr Sys.getenv('dbUser')
-  password: !expr Sys.getenv('dbPassword')
+  dbServer: snowflake_prod
   databaseName: snowflake_prod_20260101
   databaseLabel: Snowflake Production
   cdmDatabaseSchema: omop_schema
@@ -279,13 +267,8 @@ snowflake_prod:
   tempEmulationSchema: temp_schema
   cohortTable: my_study_cohorts
 
-# PostgreSQL: Uses server/port format
 postgres_local:
-  dbms: postgresql
-  server: localhost
-  port: 5432
-  user: !expr Sys.getenv('pgUser')
-  password: !expr Sys.getenv('pgPassword')
+  dbServer: postgres_local
   databaseName: postgres_local_20260101
   databaseLabel: PostgreSQL Local
   cdmDatabaseSchema: public
@@ -294,17 +277,24 @@ postgres_local:
   cohortTable: my_study_pg_cohorts
 ```
 
-**Setting up environment variables:**
+The matching `~/.picard/secrets.yml` supplies the credentials, one
+top-level key per `dbServer`. Values can be plain strings or `!expr` R
+expressions (e.g. `keyring::key_get(...)`, `Sys.getenv(...)`):
 
-In your `.Renviron` file (in project or home directory):
+``` yaml
+snowflake_prod:
+  dbms: snowflake
+  connectionString: !expr keyring::key_get("picard", "snowflake_prod_connstr")
+  user: !expr keyring::key_get("picard", "snowflake_prod_user")
+  password: !expr keyring::key_get("picard", "snowflake_prod_password")
 
-    dbUser=your_db_username
-    dbPassword=your_db_password
-    dbConnectionString=jdbc:snowflake://account.snowflakecomputing.com:443
-    pgUser=postgres_user
-    pgPassword=postgres_password
-
-Load before running pipeline: `readRenviron("~/.Renviron")`
+postgres_local:
+  dbms: postgresql
+  server: localhost
+  port: 5432
+  user: !expr Sys.getenv("PG_USER")
+  password: !expr Sys.getenv("PG_PASSWORD")
+```
 
 #### main.R
 
@@ -440,52 +430,24 @@ execution more transparent and reproducible.
 
 #### analysis/migrations/
 
-Post-processing scripts that clean and reshape pipeline results for
-dissemination. Migrations are numbered to correspond with their source
-analysis tasks (e.g., `02_migrate_surveillance.R` cleans output from
-task `02_surveillance.R`).
-
-**Purpose:**
-
-After `orchestratePipelineExport()` binds raw results with metadata,
-migrations handle data wrangling tasks that weren’t necessary during
-execution:
-
-- **Aggregating:** Combine results across subgroups or time periods
-- **Standardizing:** Apply demographic weighting or statistical
-  adjustments
-- **Pivoting:** Reshape long format to wide for publication tables
-- **Deriving:** Calculate new metrics (confidence intervals, effect size
-  categories, standardized rates)
-- **Filtering:** Remove rows below minimum cell counts or meeting
-  exclusion criteria
-
-**Workflow:**
-
-    Task 02: Pipeline Execution
-        ↓
-    orchestratePipelineExport() → raw results to dissemination/export/merge/
-        ↓
-    Migration 02: Data Wrangling (02_migrate_surveillance.R)
-        ↓
-    dissemination/export/pretty/ → finalized, publication-ready results
-
-**Example Structure:**
-
-    analysis/migrations/
-    ├── 02_migrate_surveillance.R
-    │   # Aggregate surveillance counts by age/sex strata
-    │   # Apply census weighting for standardization
-    │   # Generate crude and standardized prevalence/incidence rates
-    ├── 03_migrate_comparative.R
-    │   # Pivot comparative analysis results wide
-    │   # Calculate confidence intervals and p-values
-    └── 05_migrate_sensitivity.R
-        # Combine sensitivity analysis variants into summary table
-
-Each migration reads from `dissemination/export/merge/` (raw exported
-results), performs transformations, and writes cleaned data to
-`dissemination/export/pretty/` for final dissemination.
+There is no `analysis/migrations/` folder in current Picard studies —
+post-processing and formatting now happen entirely under
+`dissemination/`, outside the versioned `analysis/` code. After
+[`execStudyPipeline()`](https://ohdsi.github.io/Picard/reference/execStudyPipeline.md)
+finishes,
+[`runPostProcessing()`](https://ohdsi.github.io/Picard/reference/runPostProcessing.md)
+merges raw per-database results into
+`dissemination/export/merge/v{version}/`, and numbered scripts in
+`dissemination/pretty/R/` (created with
+[`makeDisseminationScript()`](https://ohdsi.github.io/Picard/reference/makeDisseminationScript.md),
+run with
+[`sourceDisseminationScripts()`](https://ohdsi.github.io/Picard/reference/sourceDisseminationScripts.md))
+handle the data wrangling and formatting that used to live in migration
+scripts — aggregating, standardizing, pivoting, deriving, and filtering
+results for dissemination. See [Post-Processing and
+Dissemination](https://ohdsi.github.io/Picard/articles/post_processing.md)
+and the [Dissemination Folder](#dissemination-folder) section below for
+the full workflow.
 
 ### Inputs Folder
 
@@ -525,29 +487,28 @@ studies.
     ├── sql/
     │   ├── 004_primarySubset.sql          # Subset of cohort 001
     │   └── 005_combinedPopulation.sql     # Union of cohorts 001 & 002
-    ├── cohortsLoad.csv                    # Metadata index for cohort enrichment
+    ├── cohortsLoad.csv                    # ATLAS cohorts to bulk-import
     └── cohortManifest.sqlite              # Provenance & metadata tracking database
 
 **cohortsLoad.csv:**
 
-A CSV file with metadata for each cohort. When
-[`loadCohortManifest()`](https://ohdsi.github.io/Picard/reference/loadCohortManifest.md)
-is called, this file is used to enrich CohortDef objects by matching
-`file_name` with actual cohort files. Used to track where cohorts came
-from and organize them with tags.
+A CSV file listing the ATLAS cohorts to bulk-import.
+[`createBlankCohortsLoadFile()`](https://ohdsi.github.io/Picard/reference/createBlankCohortsLoadFile.md)
+scaffolds it; `importAtlasCohorts()` reads it, downloads each cohort’s
+JSON to `json/`, and registers it in the manifest with the
+`label`/`category`/`subCategory` carried onto the cohort as tags.
 
-Columns: - `atlasId`: ATLAS cohort ID (integer, e.g., `1`, `42`) -
-`label`: Display name (character, e.g., `"Type 2 Diabetes patients"`) -
-`category`: Broad grouping (character, e.g., `"Disease Populations"`) -
-`subCategory`: Sub-grouping (character, optional, e.g., `"Endocrine"`) -
-`file_name`: Relative path to JSON file (character, e.g.,
-`"json/t2dm_patients.json"`)
+Columns: - `atlasId`: ATLAS cohort definition ID (integer, e.g., `1`,
+`42`) - `label`: Display name (character, e.g.,
+`"Type 2 Diabetes patients"`) - `category`: Broad grouping (character,
+e.g., `"Disease Populations"`) - `subCategory`: Sub-grouping (character,
+optional, e.g., `"Endocrine"`)
 
 Example:
 
-    atlasId,label,category,subCategory,file_name
-    1,Type 2 Diabetes,Disease Populations,Endocrine,json/t2dm_patients.json
-    2,Diabetes Complications,Disease Populations,Endocrine,json/diabetes_complications.json
+    atlasId,label,category,subCategory
+    1,Type 2 Diabetes,Disease Populations,Endocrine
+    2,Diabetes Complications,Disease Populations,Endocrine
 
 When loaded, these metadata fields are converted to tags on each cohort
 for later querying (e.g., `$queryCohortsByTag()`,
@@ -558,32 +519,39 @@ for later querying (e.g., `$queryCohortsByTag()`,
 SQLite database created/managed by `CohortManifest` class. Contains
 `cohort_manifest` table tracking all cohort metadata:
 
-| Column       | Type                               | Purpose                                                                                                  |
-|--------------|------------------------------------|----------------------------------------------------------------------------------------------------------|
-| `id`         | INTEGER PRIMARY KEY                | Sequential cohort ID assigned by Picard                                                                  |
-| `label`      | TEXT NOT NULL                      | Cohort display name                                                                                      |
-| `tags`       | TEXT                               | Serialized tags (e.g., `"atlasId: 1 \| category: Disease Populations \| subCategory: Endocrine"`)        |
-| `filePath`   | TEXT NOT NULL                      | Full path to cohort definition file                                                                      |
-| `hash`       | TEXT NOT NULL                      | MD5 hash of SQL for change detection                                                                     |
-| `cohortType` | TEXT DEFAULT ‘circe’               | Type: `'circe'` (ATLAS JSON), `'sql'` (custom), `'subset'`, `'union'`, `'complement'` (dependency-based) |
-| `timestamp`  | DATETIME DEFAULT CURRENT_TIMESTAMP | When cohort was added to manifest                                                                        |
-| `status`     | TEXT DEFAULT ‘active’              | Status tracking: `'active'`, `'missing'`, `'archived'`                                                   |
-| `deleted_at` | DATETIME                           | Soft-delete timestamp if cohort removed                                                                  |
+| Column            | Type                               | Purpose                                                                                                         |
+|-------------------|------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `id`              | INTEGER PRIMARY KEY                | Sequential cohort ID assigned by Picard                                                                         |
+| `label`           | TEXT NOT NULL                      | Cohort display name (unique among active records)                                                               |
+| `category`        | TEXT NOT NULL                      | User classification (e.g., “Disease Populations”)                                                               |
+| `tags`            | TEXT                               | Serialized tags (e.g., `"atlasId: 1 \| subCategory: Endocrine"`)                                                |
+| `file_path`       | TEXT NOT NULL                      | Path to the SQL/JSON file, stored **relative to the study repo root**                                           |
+| `hash`            | TEXT NOT NULL                      | Hash of the file **contents** for change detection                                                              |
+| `source_type`     | TEXT NOT NULL                      | `'circe'`, `'sql'`, or `'derived'`                                                                              |
+| `cohort_type`     | TEXT NOT NULL                      | `circe`, `custom`, `custom_derived`, `union`, `subset`, `complement`, `composite`, `oprior`, `tprior`, `censor` |
+| `depends_on`      | TEXT                               | JSON array of parent cohort IDs (derived cohorts only)                                                          |
+| `dependency_rule` | TEXT                               | JSON object of build parameters (derived cohorts only)                                                          |
+| `status`          | TEXT DEFAULT ‘active’              | `'active'`, `'stale'`, `'deleted'`, or `'purged'`                                                               |
+| `created_at`      | DATETIME DEFAULT CURRENT_TIMESTAMP | When cohort was added to manifest                                                                               |
+| `updated_at`      | DATETIME DEFAULT CURRENT_TIMESTAMP | Last metadata/definition change                                                                                 |
+| `deleted_at`      | DATETIME                           | Soft-delete timestamp if cohort removed                                                                         |
 
 **Workflow:**
 
-1.  Create `cohortsLoad.csv` with metadata for your cohorts (use
-    [`createBlankCohortsLoadFile()`](https://ohdsi.github.io/Picard/reference/createBlankCohortsLoadFile.md))
-2.  Import ATLAS cohort JSON definitions to `json/` folder (use
-    `importAtlasCohorts()`)
-3.  Add custom SQL or dependency-based cohorts to `sql/` (e.g., subsets,
-    unions)
+1.  Initialize the manifest with
+    [`initCohortManifest()`](https://ohdsi.github.io/Picard/reference/initCohortManifest.md)
+    (creates `cohortManifest.sqlite`)
+2.  Register cohorts: bulk-import from ATLAS with `cohortsLoad.csv` +
+    `$importAtlasCohorts()`, or add individually with
+    `$addCirceCohort()`, `$addCaprCohort()`, `$addSqlCohort()`
+3.  Add derived cohorts with the `$build*()` /
+    `$addDependentCustomCohort()` methods
 4.  Call
     [`loadCohortManifest()`](https://ohdsi.github.io/Picard/reference/loadCohortManifest.md)
-    to scan directories and enrich with `cohortsLoad.csv` metadata
-5.  First load creates `cohortManifest.sqlite` database; subsequent
-    loads verify file hashes
-6.  Use CohortManifest methods to query cohorts: `$queryCohortById(1)`,
+    each session to rebuild the in-memory objects from SQLite
+5.  Loads auto-sync against disk: file hashes are re-checked and drift
+    is flagged
+6.  Use CohortManifest methods to query cohorts: `$getCohortById(1)`,
     `$queryCohortsByTag("category: Disease Populations")`
 
 **See also:** [Loading
@@ -600,34 +568,31 @@ extracting covariates:
     │   ├── exposure_antidiabetic.json        # Drug exposure concept set
     │   ├── outcome_mi.json                   # Condition outcome concept set
     │   └── covariate_hypertension.json       # Covariate measurement concept set
-    ├── conceptSetsLoad.csv                   # Metadata index for concept set enrichment
+    ├── conceptSetsLoad.csv                   # ATLAS concept sets to bulk-import
     └── conceptSetManifest.sqlite             # Provenance & metadata tracking database
 
 **conceptSetsLoad.csv:**
 
-Similar to cohortsLoad.csv, this CSV provides metadata for enriching
-`ConceptSetDef` objects. Columns: - `atlasId`: ATLAS concept set ID
-(integer, e.g., `456`, `789`) - `label`: Display name (character, e.g.,
+Similar to cohortsLoad.csv, this CSV lists the ATLAS concept sets to
+bulk-import via `$importAtlasConceptSets()`.
+[`createBlankConceptSetsLoadFile()`](https://ohdsi.github.io/Picard/reference/createBlankConceptSetsLoadFile.md)
+scaffolds it. Columns: - `atlasId`: ATLAS concept set ID (integer, e.g.,
+`456`, `789`) - `label`: Display name (character, e.g.,
 `"Antidiabetic medications"`) - `category`: Broad grouping (character,
 e.g., `"Medications"` or `"Diagnoses"`) - `subCategory`: Optional
 sub-grouping (character, e.g., `"Endocrine Drugs"`) - `domain`: OMOP
-clinical domain (required, character): - `drug_exposure` -
-Medication/drug concept sets - `condition_occurrence` - Diagnosis
-concept sets - `measurement` - Lab/test result concept sets -
-`procedure` - Medical procedure concept sets - `observation` -
-Observation concept sets - `device_exposure` - Device/equipment concept
-sets - `visit_occurrence` - Visit type concept sets - `init` - Not yet
-classified (placeholder) - `sourceCode`: Rarely used; TRUE if concept
-set represents source codes instead of standard concepts (character:
-`TRUE` or `FALSE`) - `file_name`: Relative path to JSON file (character,
-e.g., `"json/hypertension.json"`)
+clinical domain (character): `drug_exposure`, `condition_occurrence`,
+`measurement`, `procedure`, `observation`, `device_exposure`,
+`visit_occurrence`, or `init` (not yet classified) - `sourceCode`:
+Rarely used; `TRUE` if the concept set represents source codes instead
+of standard concepts
 
 Example:
 
-    atlasId,label,category,subCategory,domain,sourceCode,file_name
-    456,Antidiabetic Medications,Medications,Endocrine,drug_exposure,FALSE,json/exposure_antidiabetic.json
-    789,Acute MI,Diagnoses,Cardiovascular,condition_occurrence,FALSE,json/outcome_mi.json
-    1001,Hypertension,Diagnoses,Cardiovascular,condition_occurrence,FALSE,json/covariate_hypertension.json
+    atlasId,label,category,subCategory,sourceCode,domain
+    456,Antidiabetic Medications,Medications,Endocrine,FALSE,drug_exposure
+    789,Acute MI,Diagnoses,Cardiovascular,FALSE,condition_occurrence
+    1001,Hypertension,Diagnoses,Cardiovascular,FALSE,condition_occurrence
 
 When loaded, metadata fields are converted to tags on each concept set
 for querying (e.g., `$getConceptSetsByTag()`,
@@ -638,32 +603,36 @@ for querying (e.g., `$getConceptSetsByTag()`,
 SQLite database created/managed by `ConceptSetManifest` class. Contains
 `concept_set_manifest` table:
 
-| Column       | Type                               | Purpose                                                                                    |
-|--------------|------------------------------------|--------------------------------------------------------------------------------------------|
-| `id`         | INTEGER PRIMARY KEY                | Sequential concept set ID assigned by Picard                                               |
-| `label`      | TEXT NOT NULL                      | Concept set display name                                                                   |
-| `tags`       | TEXT                               | Serialized tags (e.g., `"atlasId: 456 \| domain: drug_exposure \| category: Medications"`) |
-| `filePath`   | TEXT NOT NULL                      | Full path to concept set JSON file                                                         |
-| `hash`       | TEXT NOT NULL                      | MD5 hash of JSON for change detection                                                      |
-| `timestamp`  | DATETIME DEFAULT CURRENT_TIMESTAMP | When concept set added to manifest                                                         |
-| `status`     | TEXT DEFAULT ‘active’              | Status: `'active'`, `'missing'`, `'archived'`                                              |
-| `deleted_at` | DATETIME                           | Soft-delete timestamp if removed                                                           |
+| Column       | Type                               | Purpose                                                           |
+|--------------|------------------------------------|-------------------------------------------------------------------|
+| `id`         | INTEGER PRIMARY KEY                | Sequential concept set ID assigned by Picard                      |
+| `label`      | TEXT NOT NULL                      | Concept set display name                                          |
+| `category`   | TEXT NOT NULL                      | User classification (e.g., “Medications”)                         |
+| `tags`       | TEXT                               | Serialized tags (e.g., `"atlasId: 456 \| domain: drug_exposure"`) |
+| `file_path`  | TEXT NOT NULL                      | Path to the JSON file, stored **relative to the study repo root** |
+| `hash`       | TEXT NOT NULL                      | Hash of the file **contents** for change detection                |
+| `status`     | TEXT DEFAULT ‘active’              | `'active'`, `'stale'`, `'deleted'`, or `'purged'`                 |
+| `created_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | When concept set added to manifest                                |
+| `updated_at` | DATETIME DEFAULT CURRENT_TIMESTAMP | Last metadata/definition change                                   |
+| `deleted_at` | DATETIME                           | Soft-delete timestamp if removed                                  |
 
 **Workflow:**
 
-1.  Create or update `conceptSetsLoad.csv` with metadata (use
-    [`createBlankConceptSetsLoadFile()`](https://ohdsi.github.io/Picard/reference/createBlankConceptSetsLoadFile.md))
-2.  Import ATLAS concept set JSON definitions to `json/` folder (use
-    `importAtlasConceptSets()`)
+1.  Initialize the manifest with
+    [`initConceptSetManifest()`](https://ohdsi.github.io/Picard/reference/initConceptSetManifest.md)
+    (creates `conceptSetManifest.sqlite`)
+2.  Register concept sets: bulk-import from ATLAS with
+    `conceptSetsLoad.csv` + `$importAtlasConceptSets()`, or add
+    individually with `$addConceptSetFile()`, `$addCaprConceptSet()`, or
+    `$combineConceptSets()`
 3.  Call
     [`loadConceptSetManifest()`](https://ohdsi.github.io/Picard/reference/loadConceptSetManifest.md)
-    to scan directories and enrich with `conceptSetsLoad.csv` metadata
-4.  First load creates `conceptSetManifest.sqlite` database; subsequent
-    loads verify file hashes
-5.  Use ConceptSetManifest methods to query: `$getConceptSetById(456)`,
+    each session to rebuild the in-memory objects from SQLite
+    (auto-syncs against disk)
+4.  Use ConceptSetManifest methods to query: `$getConceptSetById(456)`,
     `$getConceptSetsByTag("domain: drug_exposure")`
-6.  Extract source codes and dependencies using `$extractSourceCodes()`
-    (requires ExecutionSettings)
+5.  Extract member/source codes using `$extractIncludedCodes()` /
+    `$extractSourceCodes()` (requires ExecutionSettings)
 
 **See also:** [Loading
 Inputs](https://ohdsi.github.io/Picard/articles/loading_inputs.md) for
@@ -673,7 +642,8 @@ manifests.
 ### Dissemination Folder
 
 This folder organizes results, evidence outputs, and documentation for
-sharing with stakeholders. Contains three main subdirectories.
+sharing with stakeholders. Contains four main subdirectories:
+`documents/`, `quarto/`, `export/`, and `pretty/`.
 
 #### dissemination/documents/
 
@@ -727,51 +697,69 @@ final interactive website.
 
 #### dissemination/export/
 
-Results exported from the pipeline via `orchestratePipelineExport()` and
-processed into various formats for dissemination:
+Raw results merged across databases via
+[`runPostProcessing()`](https://ohdsi.github.io/Picard/reference/runPostProcessing.md),
+one subfolder per pipeline version:
 
     dissemination/export/
-    ├── merge/                 # Raw merged results from orchestratePipelineExport()
-    │   ├── cohortKey.csv      # Cohort definitions (generated)
-    │   ├── databaseInfo.csv   # Database metadata (generated)
-    │   ├── schema_review.csv  # Schema validation (generated)
-    │   ├── task_01_results.csv
-    │   ├── task_02_results.csv
-    │   └── task_03_results.csv
-    ├── pretty/                # Formatted results from migration scripts (Excel, CSV, etc.)
-    │   ├── mainResults.xlsx
-    │   ├── sensitivity_analyses.xlsx
-    │   └── suppTable1_demographics.xlsx
-    └── studyHubOutput/        # Files sourced by the Study Hub for dynamic rendering
-        ├── table1_demographics.csv
-        ├── figure1_incidence.csv
-        └── results_summary.json
+    └── merge/
+        └── v1.0.0/                     # One folder per pipeline version
+            ├── cohort_counts.csv       # Task results merged across databases
+            ├── characterization.csv    # Task results merged across databases
+            ├── cohortManifestSnapshot.csv  # Reference: cohort metadata at execution
+            ├── databaseInfo.csv        # Reference: database details
+            ├── schema_review.csv       # Schema inspection results
+            ├── qc_cohortValidation.csv # QC: cohort completeness validation
+            └── qc_processMeta.csv      # QC: execution metadata
+
+`runPostProcessing(pipelineVersion, dbIds, ...)` reads raw results from
+`exec/results/` across all databases and tasks for a given version,
+merges each task’s results via
+[`importAndBind()`](https://ohdsi.github.io/Picard/reference/importAndBind.md),
+adds a `databaseId` column, writes the reference/QC files above, and
+reviews schema with
+[`reviewExportSchema()`](https://ohdsi.github.io/Picard/reference/reviewExportSchema.md).
+This folder holds durable, versioned raw exports — it is not touched by
+formatting scripts.
+
+#### dissemination/pretty/
+
+Where merged results get formatted for final release. Dissemination
+scripts live in `pretty/R/`, numbered like tasks, and their output is
+written alongside them by convention:
+
+    dissemination/pretty/
+    ├── R/                          # Dissemination/formatting scripts
+    │   ├── 01_format_results.R     # Created via makeDisseminationScript()
+    │   └── 02_studyHubTables.R
+    ├── mainResults.xlsx            # Formatted output written by a script
+    └── table1_demographics.csv     # Formatted output written by a script
 
 **Workflow:**
 
-1.  **Merge phase:** `orchestratePipelineExport(pipelineVersion, dbIds)`
-    reads raw results from `exec/results/` across all databases and
-    tasks for a given version. It combines results into long-format CSV
-    files in `dissemination/export/merge/`, along with reference files
-    (cohortKey, databaseInfo, schema_review).
+1.  **Merge phase:**
+    [`runPostProcessing()`](https://ohdsi.github.io/Picard/reference/runPostProcessing.md)
+    produces the versioned raw results in
+    `dissemination/export/merge/v{version}/` described above.
+2.  **Author phase:** `makeDisseminationScript(name = "format_results")`
+    creates a numbered template in `dissemination/pretty/R/`.
+3.  **Format phase:**
+    [`sourceDisseminationScripts()`](https://ohdsi.github.io/Picard/reference/sourceDisseminationScripts.md)
+    sources every script in `dissemination/pretty/R/` in alphabetical
+    order, injecting a `disseminationEnv` object (`pipelineVersion`,
+    `databaseIds`, `outputPath`, `resultsPath`) so each script can read
+    from `dissemination/export/merge/` and write formatted
+    Excel/CSV/JSON output to `dissemination/pretty/` (or wherever
+    `outputPath` points) — for publication tables, Study Hub data, or
+    both. While authoring a script, call
+    [`createDisseminationEnv()`](https://ohdsi.github.io/Picard/reference/createDisseminationEnv.md)
+    directly to build the same object at the console and run the script
+    line by line before wiring it into the full pipeline.
 
-2.  **Format phase:** Migration scripts (e.g.,
-    `02_migrate_surveillance.R`) read from `dissemination/export/merge/`
-    and perform data wrangling, reshaping, and formatting. Output
-    depends on use case:
-
-    - **For publication/reports:** Write formatted Excel/CSV files to
-      `dissemination/export/pretty/`
-    - **For Study Hub:** Write data tables and figures to
-      `dissemination/export/studyHubOutput/`
-
-3.  **Dissemination:**
-
-    - Files in `pretty/` are copied directly to publications or
-      referenced by static Quarto reports
-    - Files in `studyHubOutput/` are sourced dynamically by Quarto files
-      in `dissemination/quarto/` to create interactive tables and
-      figures in the Study Hub website
+See [Post-Processing and
+Dissemination](https://ohdsi.github.io/Picard/articles/post_processing.md)
+for the full walkthrough, including QC reports and advanced usage of
+[`importAndBind()`](https://ohdsi.github.io/Picard/reference/importAndBind.md)/[`reviewExportSchema()`](https://ohdsi.github.io/Picard/reference/reviewExportSchema.md)/[`validateCohortResults()`](https://ohdsi.github.io/Picard/reference/validateCohortResults.md).
 
 ### Exec Folder
 

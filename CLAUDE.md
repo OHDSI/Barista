@@ -150,10 +150,10 @@ detect drift between the manifest and the on-disk cohort/concept-set
 files, and soft-deletes use a `status`/`deleted_at` column rather than
 row removal. Tags are stored as a single serialized string
 (`"key: value | key2: value2"`) and parsed back out via
-[`expandManifestTags()`](https://ohdsi.github.io/Picard/reference/expandManifestTags.md)/`parseTagsString()`.
-If you add a column or behavior to one manifest, check whether the
-parallel manifest needs the same change — they’re maintained in
-lockstep, including their migration files.
+`expandManifestTags()`/`parseTagsString()`. If you add a column or
+behavior to one manifest, check whether the parallel manifest needs the
+same change — they’re maintained in lockstep, including their migration
+files.
 
 ### Coding conventions used throughout `R/`
 

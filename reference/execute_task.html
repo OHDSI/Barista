@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">picard</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.0.6</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.0.7</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,10 @@
 <span>  pipelineVersion <span class="op">=</span> <span class="st">"dev"</span>,</span>
 <span>  checkStatus <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  env <span class="op">=</span> <span class="fu">rlang</span><span class="fu">::</span><span class="fu"><a href="https://rlang.r-lib.org/reference/stack.html" class="external-link">caller_env</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  cohortTableSuffix <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  codeState <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  logFilePath <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  cohortManifestHash <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  executionContext <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -77,6 +80,35 @@ Default: FALSE</p></dd>
 <dt id="arg-env">env<a class="anchor" aria-label="anchor" href="#arg-env"></a></dt>
 <dd><p>the execution environment</p></dd>
 
+
+<dt id="arg-codestate">codeState<a class="anchor" aria-label="anchor" href="#arg-codestate"></a></dt>
+<dd><p>List or NULL. Working-tree provenance from
+<code><a href="runPreflightChecks.html">runPreflightChecks()</a></code> (<code>sha</code> and <code>status</code>). Recorded in
+<code>exec/logs/task_run_history.csv</code> alongside each run. NULL — the
+default, used when a task is run outside the pipeline — records the code
+state as <code>"unrecorded"</code> rather than implying a clean tree.</p></dd>
+
+
+<dt id="arg-logfilepath">logFilePath<a class="anchor" aria-label="anchor" href="#arg-logfilepath"></a></dt>
+<dd><p>Character or NULL. Path to the pipeline log file for
+recording high-level milestones and full error detail. NULL (default)
+when run outside a pipeline (e.g. via <code><a href="testStudyTask.html">testStudyTask()</a></code>) — no file
+is written.</p></dd>
+
+
+<dt id="arg-cohortmanifesthash">cohortManifestHash<a class="anchor" aria-label="anchor" href="#arg-cohortmanifesthash"></a></dt>
+<dd><p>Character or NULL. Pre-computed cohort manifest
+hash (see <code><a href="dot-getCohortManifestHash.html">.getCohortManifestHash()</a></code>). NULL (default) computes it once
+here; <code><a href="execute_pipeline.html">execute_pipeline()</a></code> computes it once and passes it in so the
+manifest is not re-loaded for every task. Recorded with the run and used
+for the rerun check.</p></dd>
+
+
+<dt id="arg-executioncontext">executionContext<a class="anchor" aria-label="anchor" href="#arg-executioncontext"></a></dt>
+<dd><p>An optional <code>ExecutionContext</code> for the current run.
+When supplied it owns namespace derivation (cohort-table suffix, results
+folder) and <code>pipelineVersion</code> is taken from it.</p></dd>
+
 </dl></div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -84,7 +116,7 @@ Default: FALSE</p></dd>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Martin Lavallee.</p>
+  <p>Developed by Martin Lavallee, Katy Sadowski.</p>
 </div>
 
 <div class="pkgdown-footer-right">

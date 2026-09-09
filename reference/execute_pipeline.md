@@ -12,9 +12,10 @@ execute_pipeline(
   testMode = FALSE,
   skipRenv = FALSE,
   skipConnectivityCheck = TRUE,
+  ignoreUncommittedPaths = NULL,
+  skipCodeStateCheck = FALSE,
   env = rlang::caller_env(),
-  pipelineVersionOverride = NULL,
-  cohortTableSuffix = NULL
+  pipelineVersionOverride = NULL
 )
 ```
 
@@ -31,8 +32,10 @@ execute_pipeline(
 
 - testMode:
 
-  Logical. If TRUE, skips all validations and uses "dev" version. If
-  FALSE, enforces code validation and version management. Default: FALSE
+  Logical. If TRUE, uses test namespace/version handling and skips
+  production version management. Public test entry points still apply
+  the main-branch guard. If FALSE, enforces production version
+  management. Default: FALSE
 
 - skipRenv:
 
@@ -44,18 +47,25 @@ execute_pipeline(
   pre-flight check. Set to FALSE to attempt a test connection to each
   config block before execution begins.
 
+- ignoreUncommittedPaths:
+
+  Character vector or NULL. Repo-relative paths whose uncommitted
+  changes do not fail the code-state check. NULL (default) reads the
+  list from config.yml, which itself defaults to ignoring nothing.
+
+- skipCodeStateCheck:
+
+  Logical. If TRUE, skips the code-state check entirely. Default: FALSE
+
 - env:
 
   the execution environment
 
 - pipelineVersionOverride:
 
-  Character. Optional test-mode override for the pipeline version folder
-  label.
-
-- cohortTableSuffix:
-
-  Character. Optional test-mode suffix used for cohort table names.
+  Character. Optional test-mode override for the pipeline version (the
+  test namespace). Drives the cohort-table suffix, the results folder,
+  and the task-history namespace via the run's `ExecutionContext`.
 
 ## Value
 

@@ -30,6 +30,9 @@ loadConceptSetManifest(
 
   Logical. If TRUE (default), syncs the manifest to reconcile files on
   disk with the SQLite database (removes orphaned files, flags missing).
+  This affects file/row reconciliation only — it is not related to path
+  resolution, and FALSE is not a workaround for a manifest that fails to
+  load.
 
 - verbose:
 
@@ -38,3 +41,19 @@ loadConceptSetManifest(
 ## Value
 
 ConceptSetManifest object.
+
+## Details
+
+Concept-set file paths are stored **relative to the study repository
+root**, so a manifest loads identically on any machine and from any
+working directory. Manifests created before this convention may hold
+working-directory-relative, manifest-folder-relative, or absolute paths;
+those still resolve through a compatibility fallback, and
+[`normalizeConceptSetManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeConceptSetManifestPaths.md)
+rewrites them to the current convention in one explicit pass. Ordinary
+loads never modify the SQLite file.
+
+## See also
+
+[`normalizeConceptSetManifestPaths()`](https://ohdsi.github.io/Picard/reference/normalizeConceptSetManifestPaths.md),
+[`findStudyProjectRoot()`](https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.md)

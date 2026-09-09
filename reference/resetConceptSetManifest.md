@@ -11,7 +11,7 @@ resetConceptSetManifest(
   manifest = NULL,
   conceptSetsFolderPath = here::here("inputs/conceptSets"),
   scope = c("manifest", "full"),
-  archive = TRUE,
+  archive = FALSE,
   confirm = TRUE
 )
 ```

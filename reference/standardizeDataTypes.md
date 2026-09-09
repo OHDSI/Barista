@@ -36,3 +36,7 @@ Default type conversions:
 - Columns named "\*\_count": convert to integer
 
 - Columns containing "flag" or "indicator": convert to logical
+
+A conversion is only applied if it preserves every non-missing value. A
+column that matches a rule but cannot be coerced without introducing
+`NA` (for example a character `database_id`) is left as-is and reported.

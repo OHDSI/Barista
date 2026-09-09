@@ -7,7 +7,7 @@ that uses testStudyPipeline().
 ## Usage
 
 ``` r
-addTestMainFile(repoName, repoFolder, toolType, configBlocks, studyName)
+addTestMainFile(repoName, repoFolder, configBlocks, studyName)
 ```
 
 ## Arguments
@@ -19,10 +19,6 @@ addTestMainFile(repoName, repoFolder, toolType, configBlocks, studyName)
 - repoFolder:
 
   Character. Parent directory of the repository.
-
-- toolType:
-
-  Character. Tool type, either "dbms" or "external".
 
 - configBlocks:
 

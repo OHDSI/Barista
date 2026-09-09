@@ -1,7 +1,15 @@
 # Set Output Folder for Task
 
 Create an output folder for a specific task within the results
-directory, organized by database name and pipelineVersion.
+directory, organized by database name and pipeline version.
+
+The pipeline-version path segment is derived through
+[ExecutionContext](https://ohdsi.github.io/Picard/reference/ExecutionContext.md)
+so it always matches the cohort-table suffix produced by
+[`createExecutionSettingsFromConfig()`](https://ohdsi.github.io/Picard/reference/createExecutionSettingsFromConfig.md):
+a non-semver (test) `pipelineVersion` such as `"develop_ml"` is
+normalized to lowercase snake_case, and a semantic version such as
+`"1.0.2"` is used unchanged.
 
 ## Usage
 
@@ -22,8 +30,9 @@ setOutputFolder(
 
 - pipelineVersion:
 
-  A character string specifying the pipelineVersion of the analysis
-  (e.g., "0.0.1", "1.0.2")
+  A character string specifying the pipeline version of the analysis: a
+  test namespace (e.g. `"develop_ml"`) or a semantic version (e.g.
+  `"1.0.2"`).
 
 - taskName:
 

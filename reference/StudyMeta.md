@@ -24,6 +24,8 @@ study components.
 - `studyTags`: Character vector of tags describing the study
   (read/write)
 
+- `studyDescription`: Optional study description (read/write)
+
 - `contributors`: List of ContributorLine objects (read/write)
 
 ### Methods
@@ -56,6 +58,10 @@ study components.
 
   Character vector of tags describing study topics and characteristics.
   Can be read or set with validation.
+
+- `studyDescription`:
+
+  Optional description of the study. Can be read or set with validation.
 
 - `studyLinks`:
 
@@ -95,7 +101,8 @@ Initialize a new StudyMeta instance with study metadata.
       studyType,
       contributors,
       studyLinks = NULL,
-      studyTags = NULL
+      studyTags = NULL,
+      studyDescription = NULL
     )
 
 #### Arguments
@@ -124,6 +131,10 @@ Initialize a new StudyMeta instance with study metadata.
 
   Character vector. Optional tags describing the study
   topics/characteristics.
+
+- `studyDescription`:
+
+  Character string. Optional description of the study.
 
 #### Returns
 
