@@ -47,12 +47,12 @@ then saves them to the export folder.
 Folder structure expected:
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{exec/results/
-  databaseName1/
+  normalized_database_name1/
     version/
       taskName/
         file1.csv
         file2.csv
-  databaseName2/
+  normalized_database_name2/
     version/
       taskName/
         file1.csv

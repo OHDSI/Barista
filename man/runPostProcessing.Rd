@@ -84,13 +84,13 @@ lockfileHash, databasesIncluded, qcStatus)
 Expected folder structure:
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{exec/results/
-  databaseName1/
+  normalized_database_name1/
     version/
       task1/
         results.csv
       task2/
         results.csv
-  databaseName2/
+  normalized_database_name2/
     version/
       task1/
         results.csv

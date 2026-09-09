@@ -56,7 +56,21 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.7" id="picard-007">picard 0.0.7<a class="anchor" aria-label="anchor" href="#picard-007"></a></h2>
 <div class="section level3">
+<h3 id="breaking-changes-0-0-7">Breaking Changes<a class="anchor" aria-label="anchor" href="#breaking-changes-0-0-7"></a></h3>
+<ul><li>
+<code><a href="../reference/testStudyPipeline.html">testStudyPipeline()</a></code> — the <code>testLabel</code> argument is renamed to <code>pipelineVersion</code>. <code>testStudyPipeline(configBlock, testLabel = "feature_x")</code> becomes <code>testStudyPipeline(configBlock, pipelineVersion = "feature_x")</code>. The value has the same meaning (a test-mode namespace) and the same normalization, so only the argument name changes. There is no compatibility shim — a stray <code>testLabel =</code> now raises <code>unused argument</code>.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="new-features-0-0-7">New Features<a class="anchor" aria-label="anchor" href="#new-features-0-0-7"></a></h3>
+<div class="section level4">
+<h4 id="unified-test-mode-namespaces-0-0-7">Unified Test-Mode Namespaces<a class="anchor" aria-label="anchor" href="#unified-test-mode-namespaces-0-0-7"></a></h4>
+<ul><li>In test mode, <code>pipelineVersion</code> is a single namespace that now drives the cohort table suffix, the <code>exec/results/&lt;database&gt;/&lt;namespace&gt;/</code> folder, <strong>and</strong> the task-run-history namespace consistently. Previously the results folder honored the label while cohort generation could fall back to <code>_dev</code>, so a task would look for a table that cohort generation never created (issue <a href="https://github.com/OHDSI/Picard/issues/104" class="external-link">#104</a>).</li>
+<li>
+<code><a href="../reference/testStudyTask.html">testStudyTask()</a></code> gains a <code>pipelineVersion</code> argument (default <code>"dev"</code>), so single-task and full-pipeline testing share one namespace. Two analysts on the same branch and schema can now run <code>pipelineVersion = "dev_ml"</code> and <code>pipelineVersion = "dev_ks"</code> without colliding — separate cohort tables, separate result folders, and separate rerun state in <code>exec/logs/task_run_history.csv</code>.</li>
+<li>A test namespace is normalized (lowercase, non-alphanumeric runs collapsed to <code>_</code>) but no longer silently truncated: a namespace that would produce a cohort table name longer than 60 characters is rejected before any database work.</li>
+<li>
+<code>pipelineVersion</code> remains the production semantic version in production mode; the branch guard (test and production runs are both refused on <code>main</code>) is unchanged.</li>
+</ul></div>
 <div class="section level4">
 <h4 id="code-state-escape-hatches-0-0-7">Code State Escape Hatches<a class="anchor" aria-label="anchor" href="#code-state-escape-hatches-0-0-7"></a></h4>
 <ul><li>Scoped escape hatches for the “Code state” pre-flight check, for study repos where files under <code>inputs/</code> churn without a deliberate edit. Both default to off, so unchanged studies get exactly the previous behavior.
@@ -82,10 +96,29 @@
 <ul><li>Added the optional <code>studyDescription</code> field to <code><a href="../reference/makeStudyMeta.html">makeStudyMeta()</a></code>. When supplied, it is inserted into the generated README; when omitted, the existing description placeholder is retained.</li>
 <li>Added <code><a href="../reference/publishStudyHubPosit.html">publishStudyHubPosit()</a></code> to render and publish a Study Hub through Quarto’s public Posit Connect publishing API.</li>
 </ul></div>
+<div class="section level4">
+<h4 id="portable-manifest-file-paths-0-0-7">Portable Manifest File Paths<a class="anchor" aria-label="anchor" href="#portable-manifest-file-paths-0-0-7"></a></h4>
+<ul><li>Cohort and concept-set <code>file_path</code> values are now stored <strong>relative to the study repository root</strong> instead of the caller’s working directory, so <code><a href="../reference/loadCohortManifest.html">loadCohortManifest()</a></code> / <code><a href="../reference/loadConceptSetManifest.html">loadConceptSetManifest()</a></code> resolve them identically on any machine and from any working directory. A file registered by one collaborator now loads for everyone else.</li>
+<li>Added <code><a href="../reference/findStudyProjectRoot.html">findStudyProjectRoot()</a></code> (exported): walks upward from a path until it finds the study-repo markers (<code>config.yml</code>, <code>README.md</code>, <code>analysis/</code>, <code>inputs/</code>, <code>dissemination/</code>). Each manifest object resolves and caches its root once.</li>
+<li>Legacy manifests keep working: a compatibility resolver tries the repo-root-relative location, then the manifest-folder-relative location, then the stored absolute path.</li>
+<li>Added <code><a href="../reference/normalizeCohortManifestPaths.html">normalizeCohortManifestPaths()</a></code> and <code><a href="../reference/normalizeConceptSetManifestPaths.html">normalizeConceptSetManifestPaths()</a></code> (exported) to rewrite legacy stored paths to the repo-root-relative convention in one explicit pass. They rewrite <code>file_path</code> only — hashes, <code>status</code>, and timestamps are untouched — support <code>dryRun = TRUE</code>, and report unresolvable rows as <code>broken</code>. Ordinary loads and <code>syncManifest()</code> never rewrite stored paths.</li>
+<li>
+<code>syncManifest()</code> compares file <strong>contents</strong>, not paths: a manifest whose stored paths use an older convention now syncs with no spurious <code>hash_updated</code> results.</li>
+<li>
+<code>CohortDef$getFilePath()</code> / <code>ConceptSetDef$getFilePath()</code> now return an absolute path (safe to read regardless of <code><a href="https://rdrr.io/r/base/getwd.html" class="external-link">getwd()</a></code>); the new <code>$getDisplayPath(root = NULL)</code> gives a repo-root-relative path for display.</li>
+</ul></div>
 </div>
 <div class="section level3">
 <h3 id="bug-fixes-0-0-7">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-0-0-7"></a></h3>
-<ul><li>Fixed several problems with the <code>'stale'</code> cohort status (see Issue <a href="https://github.com/ohdsi/Picard/issues/74" class="external-link">#74</a>). <code>'stale'</code> now consistently means “registered, but needs regenerating”, rather than removing a cohort from the study:
+<ul><li>
+<code><a href="../reference/createExecutionSettingsFromConfig.html">createExecutionSettingsFromConfig()</a></code> now honors its documented default: <code>pipelineVersion = "prod"</code> (or a <code>MAJOR.MINOR.PATCH</code> version) uses the configured cohort table unchanged. Previously <code>"prod"</code> was treated as a non-semver test namespace and produced a <code>_prod</code>-suffixed table.</li>
+<li>Fixed cohort-manifest change detection for task reruns (<code><a href="../reference/shouldRerunTask.html">shouldRerunTask()</a></code>), which was broken three ways at once, so editing a cohort definition never re-ran the tasks that used it:
+<ul><li>The hash helper called <code>CohortDef$getHash()</code>, a method renamed to <code>getSqlHash()</code> months earlier, so it always errored and returned <code>NA</code>.</li>
+<li>An <code>NA</code> hash <em>disabled</em> the manifest check instead of forcing a rerun (masking the first bug once a study had any cohorts).</li>
+<li>The computed hash was never written to <code>exec/logs/task_run_history.csv</code>, so even a working hash had nothing to compare against.</li>
+<li>Now <code>CohortManifest$getManifestHash()</code> is the single source of truth: a deterministic SHA256 over every active/stale cohort’s <strong>rendered SQL</strong> plus its id, type, and dependency structure. Cohort labels, categories, and tags are excluded (renaming or retagging is not a definition change), and the digest is independent of file paths (path normalization does not force spurious reruns). <code><a href="../reference/shouldRerunTask.html">shouldRerunTask()</a></code> compares this against the hash recorded on the previous run and <strong>forces a rerun whenever the hash is unavailable or was never recorded</strong> (existing history rows self-heal on the next run). <code><a href="../reference/execStudyPipeline.html">execStudyPipeline()</a></code> / <code><a href="../reference/testStudyPipeline.html">testStudyPipeline()</a></code> compute it once per run rather than once per task.</li>
+</ul></li>
+<li>Fixed several problems with the <code>'stale'</code> cohort status (see Issue <a href="https://github.com/ohdsi/Picard/issues/74" class="external-link">#74</a>). <code>'stale'</code> now consistently means “registered, but needs regenerating”, rather than removing a cohort from the study:
 <ul><li>Re-running a derived cohort builder (e.g. <code>addDependentCustomCohort()</code>, <code>buildUnionCohort()</code>) with <code>stopIfExists = FALSE</code> and unchanged inputs no longer marks the cohort — and everything downstream of it — stale. Staleness is now cascaded only on a real definition change (content hash, file path, parents, or build rule), and a metadata-only edit no longer forces regeneration.</li>
 <li>Stale cohorts are once again returned by <code>tabulateManifest(filter = "active")</code> and therefore by all <code>query...()</code> methods, so they can be queried by label/tag/category and used as parents for new derived cohorts.</li>
 <li>

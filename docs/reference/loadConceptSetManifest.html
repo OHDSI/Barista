@@ -87,7 +87,10 @@ Defaults to <code>here::here("inputs/conceptSets")</code>.</p></dd>
 
 <dt>autoSync</dt>
 <dd><p>Logical. If TRUE (default), syncs the manifest to reconcile
-files on disk with the SQLite database (removes orphaned files, flags missing).</p></dd>
+files on disk with the SQLite database (removes orphaned files, flags
+missing). This affects file/row reconciliation only — it is not related to
+path resolution, and FALSE is not a workaround for a manifest that fails
+to load.</p></dd>
 
 
 <dt>verbose</dt>
@@ -99,6 +102,20 @@ files on disk with the SQLite database (removes orphaned files, flags missing).<
     
 
 <p>ConceptSetManifest object.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Concept-set file paths are stored <strong>relative to the study repository root</strong>,
+so a manifest loads identically on any machine and from any working
+directory. Manifests created before this convention may hold
+working-directory-relative, manifest-folder-relative, or absolute paths;
+those still resolve through a compatibility fallback, and
+<code><a href="normalizeConceptSetManifestPaths.html">normalizeConceptSetManifestPaths()</a></code> rewrites them to the current convention
+in one explicit pass. Ordinary loads never modify the SQLite file.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="normalizeConceptSetManifestPaths.html">normalizeConceptSetManifestPaths()</a></code>, <code><a href="findStudyProjectRoot.html">findStudyProjectRoot()</a></code></p></div>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc"><h2>On this page</h2>

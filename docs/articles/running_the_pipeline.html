@@ -140,41 +140,59 @@ acceptance</li>
 <h2 id="test-mode-namespaces-avoiding-multi-user-dev-conflicts">Test Mode Namespaces (Avoiding Multi-User <code>dev</code>
 Conflicts)<a class="anchor" aria-label="anchor" href="#test-mode-namespaces-avoiding-multi-user-dev-conflicts"></a>
 </h2>
-<p>When multiple users run test mode at the same time, sharing the
-default <code>dev</code> namespace can cause collisions in both result
-folders and cohort table names.</p>
-<p>Use <code>testStudyPipeline(testLabel = ...)</code> to isolate your
-test run:</p>
+<p><code>pipelineVersion</code> is interpreted by execution mode:</p>
+<ul>
+<li>
+<strong>Production</strong> — it is the semantic study version
+(e.g. <code>1.2.0</code>), managed for you by the version-increment
+prompt.</li>
+<li>
+<strong>Test</strong> — it is a <em>namespace</em>: a label that
+isolates one analyst’s test run from another’s when several people share
+the same database schema. The default is <code>"dev"</code>.</li>
+</ul>
+<p>When multiple users run test mode at once, all sharing the
+<code>dev</code> namespace, their result folders and cohort tables
+collide. Pass a distinct <code>pipelineVersion</code> to keep runs
+separate:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Default test namespace (legacy behavior)</span></span>
+<code class="sourceCode R"><span><span class="co"># Default test namespace</span></span>
 <span><span class="fu"><a href="../reference/testStudyPipeline.html">testStudyPipeline</a></span><span class="op">(</span>configBlock <span class="op">=</span> <span class="st">"primaryDB"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Custom namespace for your branch or feature</span></span>
 <span><span class="fu"><a href="../reference/testStudyPipeline.html">testStudyPipeline</a></span><span class="op">(</span></span>
 <span>  configBlock <span class="op">=</span> <span class="st">"primaryDB"</span>,</span>
-<span>  testLabel <span class="op">=</span> <span class="st">"feature_ml_test"</span></span>
+<span>  pipelineVersion <span class="op">=</span> <span class="st">"feature_ml_test"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>What <code>testLabel</code> controls:</p>
+<p>The one <code>pipelineVersion</code> value drives, consistently:</p>
 <ul>
-<li>
-<strong>Results path namespace</strong> under
-<code>exec/results/[database]/[testLabel]/...</code>
+<li>the <strong>results folder</strong> —
+<code>exec/results/[database]/[pipelineVersion]/...</code>
 </li>
-<li>
-<strong>Cohort table suffix</strong> in execution settings (for
-example <code>_feature_ml_test</code>)</li>
-</ul>
-<p>Normalization rules for <code>testLabel</code>:</p>
-<ul>
-<li>converted to lowercase</li>
-<li>non-alphanumeric characters converted to <code>_</code>
+<li>the <strong>cohort table suffix</strong> —
+e.g. <code>cohort_table_feature_ml_test</code>
 </li>
-<li>repeated/edge underscores trimmed</li>
-<li>truncated to 24 characters</li>
+<li>the <strong>task-history namespace</strong> in
+<code>exec/logs/task_run_history.csv</code>, so a rerun check never
+confuses one analyst’s run with another’s</li>
 </ul>
-<p>This behavior is <strong>test mode only</strong>. Production
-execution remains strict and uses semantic versioning with no custom
-suffix overrides.</p>
+<p>A test <code>pipelineVersion</code> is normalized — lowercased,
+non-alphanumeric runs collapsed to <code>_</code>, leading/trailing
+<code>_</code> trimmed. It is <strong>not</strong> truncated: a
+namespace that would push a cohort table name past 60 characters is
+rejected up front rather than silently shortened into a name that no
+longer matches its results folder.</p>
+<p><code><a href="../reference/testStudyTask.html">testStudyTask()</a></code> takes the same
+<code>pipelineVersion</code> argument, so single-task and full-pipeline
+testing land in the same namespace.</p>
+<p>This applies to <strong>test mode only</strong>. Production execution
+stays strict and uses semantic versioning with no custom suffix.</p>
+<blockquote>
+<p><strong>Renamed in 0.0.7:</strong> the <code>testLabel</code>
+argument to <code><a href="../reference/testStudyPipeline.html">testStudyPipeline()</a></code> is now
+<code>pipelineVersion</code>. Update any
+<code>testStudyPipeline(testLabel = "...")</code> calls.</p>
+</blockquote>
 </div>
 <div class="section level2">
 <h2 id="running-production-mode">Running Production Mode<a class="anchor" aria-label="anchor" href="#running-production-mode"></a>
@@ -412,6 +430,28 @@ check for errors, record results</p></li>
 <li><p><strong>Post-Processing:</strong> Generate version logs, create
 PR metadata, save PENDING_PR.md</p></li>
 </ol>
+<div class="section level3">
+<h3 id="task-change-detection">Task Change Detection<a class="anchor" aria-label="anchor" href="#task-change-detection"></a>
+</h3>
+<p>In phase 4 each task is checked before it runs and <strong>skipped
+when nothing that affects its output has changed</strong> since its last
+recorded run (<code>exec/logs/task_run_history.csv</code>). A task is
+re-run when any of these differ from that record:</p>
+<ul>
+<li>the task file’s own contents;</li>
+<li>a file the task <code><a href="https://rdrr.io/r/base/source.html" class="external-link">source()</a></code>s;</li>
+<li>the <strong>cohort manifest</strong> — any change to a registered
+cohort’s <em>definition</em>: the rendered SQL of a cohort, a cohort
+added or removed, or a derived cohort’s build rule. Renaming a cohort or
+editing its tags does not count;</li>
+<li>the pipeline version;</li>
+<li>a previous run that ended in failure.</li>
+</ul>
+<p>So after you edit a cohort’s JSON or SQL and regenerate, the next
+pipeline run re-executes every task that had run against the old
+definition. If the manifest hash cannot be computed for any reason,
+tasks are re-run rather than skipped.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="handling-errors-and-failures">Handling Errors and Failures<a class="anchor" aria-label="anchor" href="#handling-errors-and-failures"></a>
@@ -528,9 +568,10 @@ does not try to mirror every console line.</li>
 <li>
 <code>exec/logs/task_run_history.csv</code> remains the canonical
 structured, queryable record of every task run (one row per task, with
-<code>status</code>, <code>errorMessage</code>, <code>commitSha</code>,
-<code>codeState</code>); the log file’s error detail block is a durable,
-human-readable companion to that row, not a replacement for it.</li>
+<code>status</code>, <code>error_message</code>,
+<code>commit_sha</code>, <code>code_state</code>); the log file’s error
+detail block is a durable, human-readable companion to that row, not a
+replacement for it.</li>
 </ul>
 <p>Review the log file to understand which tasks ran, in what order, and
 how a failure surfaced:</p>

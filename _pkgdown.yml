@@ -112,12 +112,15 @@ reference:
       - displayTaskStatusReport
       - documentDependencies
       - editSecrets
+      - findStudyProjectRoot
       - formatFloats
       - formatPercentages
       - generateCohorts
       - importAndBind
       - migrateCohortManifest
       - migrateConceptSetManifest
+      - normalizeCohortManifestPaths
+      - normalizeConceptSetManifestPaths
       - pivotForComparison
       - plotCohortGraph
       - prepareDisseminationData

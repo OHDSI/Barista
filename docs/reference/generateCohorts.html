@@ -69,7 +69,12 @@ for all subsequent analytical tasks in the pipeline.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">generateCohorts</span><span class="op">(</span><span class="va">executionSettings</span>, <span class="va">pipelineVersion</span>, override <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">generateCohorts</span><span class="op">(</span></span>
+<span>  <span class="va">executionSettings</span>,</span>
+<span>  <span class="va">pipelineVersion</span>,</span>
+<span>  executionContext <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  override <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -87,6 +92,11 @@ production cohort table.</p></dd>
 Output will be saved to <code>exec/results/{databaseName}/{pipelineVersion}/00_buildCohorts/</code>.
 Non-semver values (e.g. "dev") also trigger dev cohort table routing via
 <code><a href="createExecutionSettingsFromConfig.html">createExecutionSettingsFromConfig()</a></code>.</p></dd>
+
+
+<dt>executionContext</dt>
+<dd><p>An optional <code>ExecutionContext</code> for the current run.
+When supplied, its pipeline version and result-path rules are used.</p></dd>
 
 
 <dt>override</dt>

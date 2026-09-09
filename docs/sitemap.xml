@@ -199,10 +199,16 @@
     <loc>https://ohdsi.github.io/Picard/reference/execute_task.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/ExecutionContext.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/ExecutionSettings.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/expandManifestTags.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/findStudyProjectRoot.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/findTransitiveDependents.html</loc>
@@ -268,6 +274,9 @@
     <loc>https://ohdsi.github.io/Picard/reference/initializeRenv.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/isProductionPipelineVersion.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/launchCohortsLoadEditor.html</loc>
   </url>
   <url>
@@ -319,6 +328,18 @@
     <loc>https://ohdsi.github.io/Picard/reference/migrateConceptSetManifest.html</loc>
   </url>
   <url>
+    <loc>https://ohdsi.github.io/Picard/reference/newExecutionContext.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/normalizeCohortManifestPaths.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/normalizeConceptSetManifestPaths.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/normalizePipelineVersion.html</loc>
+  </url>
+  <url>
     <loc>https://ohdsi.github.io/Picard/reference/orchestratePipelineExport.html</loc>
   </url>
   <url>
@@ -350,6 +371,9 @@
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/resetConceptSetManifest.html</loc>
+  </url>
+  <url>
+    <loc>https://ohdsi.github.io/Picard/reference/resolveResultsPath.html</loc>
   </url>
   <url>
     <loc>https://ohdsi.github.io/Picard/reference/resolveSecretValue.html</loc>
